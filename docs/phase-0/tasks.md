@@ -126,7 +126,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.8: Realignment over Tasks 0.5 to 0.7
 - Type: realignment
-- Status: todo
+- Status: done
 - Vertical slice: not a delivery task; it builds nothing. It re-proves Tasks 0.5 to 0.7 against the spec, corrects any Status that does not match reality, and produces a corrective plan.
 - Delivers: a realignment report at `docs/phase-0/realignment-2.md` marking each in-scope requirement (C2, D1, D5 for the guard; E1 to E3; F1, F2) done, partial, missing, or drifted against re-run evidence; corrected Status lines; flags for slop, scope creep, and undocumented decisions; a prioritised corrective plan.
 - Defers: new feature work; large corrective work is appended as new tasks.
