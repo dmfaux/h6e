@@ -27,7 +27,7 @@ Phase 0 left the Connect round-trip blocked: no Microsoft 365 Connect connector 
 
 ### Task 1.1: Reusable Connect scoped-credential broker
 - Type: delivery
-- Status: todo
+- Status: done (deterministic scope; live read blocked, no M365 connector provisioned, blocker recorded)
 - Vertical slice: a caller (a workflow tool or a scheduled job) requests a named capability for one operation and receives a short-lived, least-privilege credential scoped to that operation only, with the issuance and use audit-logged; a request for a wider or write scope than the capability allows is refused; against a provisioned system the broker performs one real read, and where no system is reachable it records the blocker exactly as the Phase 0 proof path does.
 - Delivers: a single internal broker over Connect that maps named capabilities (for example read calendar free/busy, write a calendar event, attach a document, read a candidate logistics field) to short-lived scoped credentials, replacing the Phase 0 one-off (F1); audit logging of every issuance and use with who, what, when, scope, target (F2); least-privilege scope enforcement so one capability cannot exceed its scope, and no decision-or-status scope is ever requested (F3, K1, ADR 0012); graceful degradation on a transient Connect failure (F4); the broker as the only path from the agent to external systems (ADR 0009).
 - Defers: the live multi-system reads and writes that use the broker (Tasks 1.5 documents, 1.7 calendar); any model call (Phase 2); warehouse access (Phase 4, ADR 0022).
