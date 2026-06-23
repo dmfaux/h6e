@@ -1,8 +1,8 @@
 # 0012. The agent's write boundary in the logistics phase
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, legal, engineering (proposed)
+- **Deciders:** Project lead, legal, engineering
 
 ## Context
 

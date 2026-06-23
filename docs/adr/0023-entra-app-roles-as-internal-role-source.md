@@ -1,8 +1,8 @@
 # 0023. Entra app-role claims as the single source of internal roles
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, engineering, security, corporate IT (proposed)
+- **Deciders:** Project lead, engineering, security, corporate IT
 
 ## Context
 

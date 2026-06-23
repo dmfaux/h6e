@@ -1,8 +1,8 @@
 # 0020. Bias evaluation for assessment marking
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, legal, data, engineering (proposed)
+- **Deciders:** Project lead, legal, data, engineering
 
 ## Context
 

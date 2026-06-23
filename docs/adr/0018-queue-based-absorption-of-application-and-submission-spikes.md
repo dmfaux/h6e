@@ -1,8 +1,8 @@
 # 0018. Queue-based absorption of application and submission spikes
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, engineering (proposed)
+- **Deciders:** Project lead, engineering
 
 ## Context
 

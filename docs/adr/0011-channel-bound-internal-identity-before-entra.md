@@ -1,8 +1,8 @@
 # 0011. Channel-bound internal identity resolution before Entra
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, engineering, security (proposed)
+- **Deciders:** Project lead, engineering, security
 
 ## Context
 

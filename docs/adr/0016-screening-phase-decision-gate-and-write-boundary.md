@@ -1,8 +1,8 @@
 # 0016. The screening-phase decision gate and agent write boundary
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, legal, engineering (proposed)
+- **Deciders:** Project lead, legal, engineering
 
 ## Context
 

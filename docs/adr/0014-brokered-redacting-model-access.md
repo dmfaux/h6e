@@ -1,8 +1,8 @@
 # 0014. Brokered, redacting model access through AI Gateway
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, engineering, legal, security (proposed)
+- **Deciders:** Project lead, engineering, legal, security
 
 ## Context
 

@@ -1,8 +1,8 @@
 # 0013. Screening and bias-evaluation policy
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, legal, data, engineering (proposed)
+- **Deciders:** Project lead, legal, data, engineering
 
 ## Context
 

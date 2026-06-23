@@ -1,8 +1,8 @@
 # 0017. Untrusted assessment execution and marking in the Sandbox
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, engineering, security (proposed)
+- **Deciders:** Project lead, engineering, security
 
 ## Context
 

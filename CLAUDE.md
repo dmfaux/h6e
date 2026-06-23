@@ -28,6 +28,8 @@ These are the standing rules of the system. Each is backed by an ADR; the ADR ha
 - Microsoft-first identity behind a swappable interface. Internal surfaces depend on our own auth interface, never on a provider directly. Dev credential provider during build, Entra via Passport later, selected by env var. The dev provider must refuse to start in production. Roles are part of the interface. Candidate identity is the WhatsApp number, not a login. (ADR 0003)
 - No private beta in the critical path. GA, open, or public beta only. (ADR 0005)
 - One stack, one repo. Agent, channels, schedules, and dashboard in this repo on Vercel, behind one auth layer. No v0, no Power BI. Dashboard is a Next.js app, not a BI tool. (ADR 0007)
+- Always use PNPM. DO NOT USE NPM!
+- Always use the most up to date Production version of any package you install. Research this before just installing. The ONLY reason to use an older version is if it is not compatible with what is already installed.
 
 ## Stack
 

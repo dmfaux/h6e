@@ -1,8 +1,8 @@
 # 0021. Funnel dashboard as a read-only reporting surface over the warehouse
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
-- **Deciders:** Project lead, engineering, data, security (proposed)
+- **Deciders:** Project lead, engineering, data, security
 
 ## Context
 
