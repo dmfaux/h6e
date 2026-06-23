@@ -1,6 +1,6 @@
 # 0026. WhatsApp candidate channel transport over Meta's Business Cloud API
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-23
 - **Deciders:** Project lead, engineering, legal
 

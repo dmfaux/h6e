@@ -42,7 +42,7 @@ Phase 0 left the Connect round-trip blocked: no Microsoft 365 Connect connector 
 
 ### Task 1.2: Durable per-candidate workflow and idempotent event correlation
 - Type: delivery
-- Status: todo
+- Status: done (deterministic scope; built on eve session + `defineState`, ADR 0002, no new ADR needed; channel wiring deferred to Task 1.3)
 - Vertical slice: an inbound candidate event starts or advances a durable per-candidate workflow keyed on the verified WhatsApp number; the workflow holds only minimal logistics state (outstanding documents, slot status, handover flag) that survives a step boundary; a duplicate delivery of the same event creates no second workflow and no duplicate side effect; an engineer can inspect and, if needed, advance or terminate a workflow.
 - Delivers: the per-candidate durable workflow as an eve session keyed on the verified WhatsApp number (E1), holding minimal logistics and correlation state via `defineState`, not a duplicate candidate record (E1, K2, ADR 0006); resume-safe handling so a failure or redeploy mid-step does not lose state or repeat a completed action (E2); idempotent, correlated inbound-event handling with a dedup key so an at-least-once duplicate causes no second workflow or duplicate side effect (E3, ADR 0010); an engineer inspect-and-advance affordance that needs no redeploy (E4).
 - Defers: the live WhatsApp wire and acknowledgement (Task 1.3); FAQ, documents, scheduling (Tasks 1.4, 1.5, 1.7); the audit trail and tracing wiring (Task 1.11).
