@@ -1,6 +1,6 @@
 import { defineChannel, GET } from "eve/channels";
 import { ROLES } from "../../src/auth/index.ts";
-import { handleWhoami } from "../../src/auth/whoami.ts";
+import { tracedWhoami } from "../../src/observability/whoami-trace.ts";
 
 // The agent's authenticated internal surface (requirement C2). This is the
 // whoami endpoint wired onto the agent boot path from Task 0.1: a custom eve
@@ -18,7 +18,9 @@ import { handleWhoami } from "../../src/auth/whoami.ts";
 export default defineChannel({
   routes: [
     GET("/internal/whoami", async (request) =>
-      handleWhoami(request, {
+      // Wrapped so the authenticated whoami path emits a real trace
+      // (requirement G2, ADR 0025). The guard and identity logic are unchanged.
+      tracedWhoami(request, {
         secret: process.env.SESSION_SECRET ?? "",
         requiredRole: ROLES.internalEngineering,
       }),

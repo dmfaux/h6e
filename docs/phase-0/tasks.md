@@ -141,7 +141,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.9: Eval and tracing harness in CI, green on an empty suite with one real trace
 - Type: delivery
-- Status: todo
+- Status: done
 - Vertical slice: the eval harness runs in CI as a real gate and passes on an empty suite, and tracing emits a real trace from the authenticated whoami path, so green means wired rather than absent.
 - Delivers: the eval harness running in CI as a gate that fails the build if it cannot run, passing on an empty suite (G1); tracing wired so at least one path (the authenticated whoami path from Task 0.5) emits a real trace (G2); a short note on where Phase 2 attaches eval cases and recommendation traces (G3); if the harness introduces a tool not already covered by ADR 0002, a Proposed ADR recording that choice.
 - Defers: all eval content, bias and disparate-impact checks, and any recommendation trace (Phase 2, ADR 0013 and the evals-policy ADR authored at Phase 2 start).

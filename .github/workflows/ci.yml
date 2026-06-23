@@ -52,6 +52,14 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Eval gate (Task 0.9, requirement G1; ADR 0002 for the eve-native harness).
+      # Runs the eval harness as a real gate. Phase 0 ships the empty frame, so
+      # this passes on an empty suite but fails the build if the harness cannot
+      # run (a broken evals.config.ts) or, once Phase 2 adds cases, if any eval
+      # fails. Green means the harness is wired, not absent.
+      - name: Eval gate
+        run: pnpm eval
+
   secret-scan:
     name: secret-scan
     runs-on: ubuntu-latest
