@@ -35,7 +35,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.2: CI/CD pipeline, preview and production environments, per-environment secrets
 - Type: delivery
-- Status: todo
+- Status: done
 - Vertical slice: opening a change runs a build-and-check gate in GitHub Actions and, on pass, yields a reachable Vercel preview URL of the booting agent; production is protected; secrets are per environment.
 - Delivers: a GitHub Actions build-and-check gate on every change; a Vercel preview deployment per pull request via the Vercel GitHub integration; a protected production environment that deploys only from the main branch through the pipeline; secrets configured per environment with none committed; if achievable, the deploy verifying the agent booted before reporting healthy (requirements B1, B2, B3, B4, ADR 0024).
 - Defers: auth (Tasks 0.3, 0.5); edge protection (Task 0.7); the eval gate wiring into CI (Task 0.9 attaches to this pipeline); all business logic.
