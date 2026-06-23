@@ -39,6 +39,19 @@ export { createEntraProvider } from "./providers/entra.ts";
 export { selectAuthProvider, type ProviderChoice } from "./select.ts";
 
 export {
+  guard,
+  extractSessionToken,
+  type GuardOptions,
+  type GuardDecision,
+} from "./guard.ts";
+export {
+  handleWhoami,
+  toWhoami,
+  type WhoamiOptions,
+  type WhoamiIdentity,
+} from "./whoami.ts";
+
+export {
   InvalidCredentialsError,
   SessionVerificationError,
   ProductionRefusalError,

@@ -65,7 +65,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.4: Realignment over Tasks 0.1 to 0.3
 - Type: realignment
-- Status: todo
+- Status: done
 - Vertical slice: not a delivery task; it builds nothing. It re-proves Tasks 0.1 to 0.3 against the spec, corrects any Status that does not match reality, and produces a corrective plan.
 - Delivers: a realignment report at `docs/phase-0/realignment-1.md` marking each in-scope requirement (A1, A2, B1 to B4, C1, D1 to D5) done, partial, missing, or drifted against re-run evidence; corrected Status lines in this file; flags for slop, scope creep, and any architectural decision lacking an ADR; a prioritised corrective plan.
 - Defers: any new feature work (none is in scope here); large corrective work is appended as new tasks rather than done inline.
@@ -80,7 +80,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.5: Route guard and authenticated whoami endpoint reaching the agent
 - Type: delivery
-- Status: todo
+- Status: done
 - Vertical slice: an authenticated request with a role-mapped dev session reaches the agent through a route guard and sees its own id, email, and roles; a request without a valid session is refused.
 - Delivers: a route guard that depends only on the auth interface and roles, never on a provider (D1); an authenticated whoami-style endpoint behind the guard that reaches the agent boot path and returns the resolved id, email, and roles (C2); a guard able to require a specific role (D5).
 - Defers: any business logic beyond returning identity and roles; Connect (Task 0.6); edge protection (Task 0.7); channel and model logic (Phase 1, Phase 2).
