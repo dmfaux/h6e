@@ -6,7 +6,7 @@ This note records what Task 0.9 stood up and where the next phase attaches, so t
 
 - Eval harness: the eve-native `eve eval` (ADR 0002), run through a thin gate at `scripts/eval-gate.mjs` (the `pnpm eval` script). The gate runs in CI as a real gate. It passes on the empty suite but fails the build if the harness cannot run (a broken `evals/evals.config.ts`) or, once cases exist, if any eval fails. Green means wired, not absent.
 - Run-wide config: `evals/evals.config.ts` (`defineEvalConfig`). No default judge model and no external reporter yet, so the empty frame needs no model-provider credentials and no data leaves the tenant.
-- Tracing: `agent/instrumentation.ts` registers a vendor-neutral OpenTelemetry provider (ADR 0025, Proposed). The authenticated whoami path is wrapped in one real span at `src/observability/whoami-trace.ts`, proved by `src/observability/whoami-trace.test.ts`. Phase 0 exports spans to the console only (no egress, ADR 0006).
+- Tracing: `agent/instrumentation.ts` registers a vendor-neutral OpenTelemetry provider (ADR 0025, Accepted). The authenticated whoami path is wrapped in one real span at `src/observability/whoami-trace.ts`, proved by `src/observability/whoami-trace.test.ts`. Phase 0 exports spans to the console only (no egress, ADR 0006).
 
 ## Where Phase 2 attaches eval cases
 
