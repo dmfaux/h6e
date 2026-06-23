@@ -37,5 +37,21 @@ Each ADR is a single markdown file named `NNNN-short-slug.md`, copied from `temp
 | [0005](0005-no-private-beta-in-critical-path.md) | No private beta components in the critical path | Accepted |
 | [0006](0006-data-minimisation-over-data-residency.md) | Data minimisation over data residency | Accepted |
 | [0007](0007-one-stack-one-repo.md) | One stack, one repo, no low-code or BI tools | Accepted |
+| [0008](0008-stateless-signed-sessions-for-internal-auth.md) | Stateless signed sessions for internal auth | Accepted |
+| [0009](0009-reusable-connect-scoped-credential-broker.md) | Reusable Connect scoped-credential broker | Accepted |
+| [0010](0010-verified-channel-webhook-ingress.md) | Verified channel webhook ingress | Accepted |
+| [0011](0011-channel-bound-internal-identity-before-entra.md) | Channel-bound internal identity resolution before Entra | Accepted |
+| [0012](0012-agent-ats-write-boundary-logistics-phase.md) | The agent's write boundary in the logistics phase | Accepted |
+| [0013](0013-screening-and-bias-evaluation-policy.md) | Screening and bias-evaluation policy | Accepted |
+| [0014](0014-brokered-redacting-model-access.md) | Brokered, redacting model access through AI Gateway | Accepted |
+| [0015](0015-untrusted-document-parsing-in-sandbox.md) | Untrusted document parsing in the Sandbox | Accepted |
+| [0016](0016-screening-phase-decision-gate-and-write-boundary.md) | The screening-phase decision gate and agent write boundary | Accepted |
+| [0017](0017-untrusted-assessment-execution-and-marking-in-sandbox.md) | Untrusted assessment execution and marking in the Sandbox | Accepted |
+| [0018](0018-queue-based-absorption-of-application-and-submission-spikes.md) | Queue-based absorption of application and submission spikes | Accepted |
+| [0019](0019-assessment-phase-decision-gate-and-write-boundary.md) | The assessment-phase decision gate and agent write boundary | Accepted |
+| [0020](0020-bias-evaluation-for-assessment-marking.md) | Bias evaluation for assessment marking | Accepted |
+| [0021](0021-funnel-dashboard-read-only-reporting-over-warehouse.md) | Funnel dashboard as a read-only reporting surface over the warehouse | Accepted |
+| [0022](0022-warehouse-read-access-through-connect-broker.md) | Warehouse read access through the Connect broker | Accepted |
+| [0023](0023-entra-app-roles-as-internal-role-source.md) | Entra app-role claims as the single source of internal roles | Accepted |
 
 Keep this table in sync when you add or change an ADR.
