@@ -156,7 +156,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.10: Metrics baseline artefact
 - Type: delivery
-- Status: todo
+- Status: done
 - Vertical slice: a versioned artefact at `docs/metrics/baseline.md` records the baseline figures (or marks them pending), the capture method, the capture date, and the owner and re-measurement method for each figure.
 - Delivers: the baseline of recruiter admin hours per requisition, time-to-hire by stage, and stage-to-stage drop-off, captured and recorded as a versioned repo artefact stating its figures (or explicit pending markers), method, and date (H1); each figure naming its owner and re-measurement method (H2). Aggregate figures only, no candidate identifiers.
 - Defers: nothing technical; the actual figures are supplied by the business and capture may complete before Phase 1 ships per the phase spec's resolution, with any not-yet-supplied figure marked pending.
