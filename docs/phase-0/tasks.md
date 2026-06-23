@@ -50,7 +50,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.3: Auth interface, dev credential provider, signed session, roles, provider selection, production refusal
 - Type: delivery
-- Status: todo
+- Status: done
 - Vertical slice: a configured dev user signs in through the dev provider and receives a stateless signed session carrying id, email, and roles; bad credentials are refused; the env var selects an inert Entra stub; the dev provider refuses to start in production.
 - Delivers: the auth interface returning a user with id, email, and roles (D1); the dev credential provider authenticating a username and password against a configured user list and issuing a stateless signed session carrying roles (D2, ADR 0008); provider selection by environment variable with the Entra-via-Passport provider present as an inert stub (D3); the dev provider failing closed in a production configuration (D4); at least recruiter, hiring-manager, and an internal engineering role defined (D5).
 - Defers: the route guard and the whoami endpoint (Task 0.5); the real Entra integration and the dev-provider decommission (Phase 5); any session datastore (excluded by ADR 0008).

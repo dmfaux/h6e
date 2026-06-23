@@ -10,6 +10,7 @@
     "build": "eve build",
     "dev": "eve dev",
     "start": "eve start",
+    "test": "sh -c 'node --test \"${1:-.}/**/*.test.ts\"' sh",
     "typecheck": "tsc"
   },
   "dependencies": {
