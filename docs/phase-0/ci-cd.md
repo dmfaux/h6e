@@ -15,10 +15,16 @@ This records how the pipeline built in Task 0.2 works, so a later realignment ca
 - Per-environment values live in the Vercel project, set separately for Preview and Production (for example `SESSION_SECRET`, distinct per environment per ADR 0008, and `APP_ENV`). CI-only needs use GitHub Actions secrets.
 - A gitleaks scan over the repository tree and git history finds nothing committed, and the same scan runs in CI on every change.
 
-## pnpm cooldown note
+## pnpm version and cooldown notes
+
+The package manager is pinned to `pnpm@11.8.0` via the `packageManager` field in `package.json`, so CI (pnpm/action-setup reads that field) and the Vercel build use the same pnpm that generated the lockfile. Vercel otherwise defaults to pnpm 10 for projects created now and trips `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` on the `overrides` snapshot written by pnpm 11; the Vercel project sets `ENABLE_EXPERIMENTAL_COREPACK=1` so Corepack honours the pin.
 
 CI installs with `pnpm install --frozen-lockfile --config.minimumReleaseAge=0`. The committed lockfile is the supply-chain control in CI; pnpm 11's default `minimumReleaseAge` cooldown is a resolution-time guard for interactive installs and can wrongly fail an already-pinned dependency under a frozen install, so it is disabled for the CI install only.
 
+## Liveness reachability and deployment protection
+
+Vercel Standard Protection (the SSO gate at the edge) is turned off for this project so the agent's unauthenticated liveness endpoint `GET /eve/v1/health` is publicly reachable on preview and production, as it is locally (requirement C1, B1). The real gate for internal agent routes is the app-layer auth in the eve channel (Tasks 0.3, 0.5), and the deliberate public edge surface with Vercel WAF and Bot ID is built in Task 0.7. This keeps the Phase 0 liveness check honestly public rather than hidden behind preview SSO.
+
 ## B4 (deferred follow-up)
 
-B4 (the deploy verifies the agent booted, not just built, before being reported healthy) is P1 and is deferred. Vercel reports a deployment Ready on a successful build; it does not yet curl `GET /eve/v1/health` on the new deployment and fail the deploy if the agent did not boot. Follow-up: add a post-deployment health gate (a workflow on the Vercel `deployment_status` event, or a Vercel deploy-time check) that hits the liveness endpoint and marks the deployment failed if it is not healthy. Tracked for a Phase 0 follow-up; the realignment tasks (0.4, 0.11) revisit it.
+B4 (the deploy verifies the agent booted, not just built, before being reported healthy) is P1 and is deferred as an automated gate. The current deploy is verifiably healthy by hand: the preview returns HTTP 200 with `{"ok":true,"status":"ready",...}` on `GET /eve/v1/health`, which only succeeds if the agent booted, not merely built. What is not yet automated is making a failed boot fail the deploy: Vercel reports a deployment Ready on a successful build and does not curl the liveness endpoint. Follow-up: add a post-deployment health gate (a workflow on the Vercel `deployment_status` event, or a Vercel deploy-time check) that hits the liveness endpoint and marks the deployment failed if it is not healthy. Tracked for a Phase 0 follow-up; the realignment tasks (0.4, 0.11) revisit it.
