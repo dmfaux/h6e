@@ -171,7 +171,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.11: Final realignment and Phase 0 done-when verification
 - Type: realignment
-- Status: todo
+- Status: done
 - Vertical slice: not a delivery task; it builds nothing. It re-proves Tasks 0.9 and 0.10 and verifies the seven Phase 0 done-when conditions hold together as one spine.
 - Delivers: a final realignment report at `docs/phase-0/realignment-3.md` marking Tasks 0.9 and 0.10's requirements (G1 to G3, H1, H2) and each of the seven Phase 0 done-when bullets done, partial, missing, or drifted against re-run evidence; corrected Status lines; flags for any slop, scope creep, or undocumented decision across the whole phase; a prioritised corrective plan separating Phase 0 sign-off blockers from human decisions.
 - Defers: new feature work; large corrective work is appended as new tasks for a human to schedule.
