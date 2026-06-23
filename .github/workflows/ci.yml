@@ -1,0 +1,67 @@
+name: CI
+
+# Build-and-check gate (Phase 0, requirement B1; ADR 0024).
+# Runs on every change: pull requests targeting main, and pushes to main.
+# Deployment itself is handled by the Vercel GitHub integration, not here.
+# Production is protected by a branch-protection rule on main that requires
+# these checks to pass, so a failing check blocks the merge and therefore the
+# production deploy (ADR 0024, requirement B2).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-check:
+    name: build-and-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Version comes from the package.json "packageManager" field (pnpm@11.8.0),
+      # keeping CI and the Vercel build on the same pnpm as the lockfile.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # The committed lockfile is the supply-chain control in CI, so we install
+      # exactly what it pins. pnpm 11's default minimumReleaseAge cooldown is a
+      # resolution-time guard for interactive installs; with a frozen lockfile
+      # it can wrongly fail an already-pinned dependency, so it is disabled here.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.minimumReleaseAge=0
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for committed secrets (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
