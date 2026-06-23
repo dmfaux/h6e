@@ -54,5 +54,6 @@ Each ADR is a single markdown file named `NNNN-short-slug.md`, copied from `temp
 | [0022](0022-warehouse-read-access-through-connect-broker.md) | Warehouse read access through the Connect broker | Accepted |
 | [0023](0023-entra-app-roles-as-internal-role-source.md) | Entra app-role claims as the single source of internal roles | Accepted |
 | [0024](0024-ci-cd-on-github-actions-with-vercel-integration.md) | CI/CD on GitHub Actions with the Vercel GitHub integration | Accepted |
+| [0025](0025-tracing-via-opentelemetry-through-eve-instrumentation.md) | Tracing via OpenTelemetry through eve's instrumentation seam | Accepted |
 
 Keep this table in sync when you add or change an ADR.
