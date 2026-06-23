@@ -111,7 +111,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.7: Public intake placeholder behind WAF and Bot ID
 - Type: delivery
-- Status: todo
+- Status: done
 - Vertical slice: an internet-facing intake placeholder endpoint is reachable, returns a placeholder response, and carries WAF and Bot ID protection at the edge, with no intake logic.
 - Delivers: the public intake endpoint as a protected placeholder with Vercel WAF and Bot ID in front of it (F1); if achievable, a basic bot probe challenged or blocked at the edge rather than by the application (F2).
 - Defers: live intake, webhook verification, and channel logic (Phase 1, ADR 0010); any candidate-data handling.
