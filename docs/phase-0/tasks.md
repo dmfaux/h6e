@@ -95,7 +95,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.6: Connect scoped-token round-trip against one real system
 - Type: delivery
-- Status: todo
+- Status: skipped
 - Blocked: the proof path (`src/connect/proof.ts`) is built and Connect is reachable, but no real external system is provisioned (no Microsoft 365 Connect connector for this project, no confirmed ATS), so the round-trip cannot complete and is not faked. Recorded for engineering and stakeholder in `docs/phase-0/task-0.6-blocker.md`. Stays todo until a real read response and audit record are surfaced.
 - Vertical slice: a single proof path obtains a scoped, short-lived Connect token for one real external system, makes one minimal read that returns a real response, and logs the issuance and use.
 - Delivers: one Connect-issued, scoped, short-lived credential against Microsoft 365 / Outlook (read-only calendar free/busy) by default, or a confirmed ATS with a read-only scope as fallback; one minimal read call that succeeds (E1); an audit log of the round-trip with who, what, when, scope, and target (E2); the scope requested kept read-only and narrow (E3).
@@ -111,7 +111,7 @@ Phase 0 stands up the walking skeleton: the spine that Phase 1 plugs into and la
 
 ### Task 0.7: Public intake placeholder behind WAF and Bot ID
 - Type: delivery
-- Status: todo
+- Status: done
 - Vertical slice: an internet-facing intake placeholder endpoint is reachable, returns a placeholder response, and carries WAF and Bot ID protection at the edge, with no intake logic.
 - Delivers: the public intake endpoint as a protected placeholder with Vercel WAF and Bot ID in front of it (F1); if achievable, a basic bot probe challenged or blocked at the edge rather than by the application (F2).
 - Defers: live intake, webhook verification, and channel logic (Phase 1, ADR 0010); any candidate-data handling.

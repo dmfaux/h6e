@@ -1,0 +1,44 @@
+{
+  "note": "Snapshot of the Vercel project firewall config for h6e. Source of truth is the Vercel project firewall (managed via the vercel firewall CLI / security API), not this file. Committed for review and reproducibility (Task 0.7, requirements F1/F2).",
+  "projectId": null,
+  "ownerId": "team_wfiP4Eb0yTxCm6DJQrZv73WC",
+  "updatedAt": "2026-06-23T11:44:27.370Z",
+  "managedRules": {
+    "bot_protection": {
+      "active": true,
+      "action": "log",
+      "updatedAt": "2026-06-23T11:44:14.526Z"
+    }
+  },
+  "rules": [
+    {
+      "name": "Intake placeholder edge bot block",
+      "active": true,
+      "action": {
+        "mitigate": {
+          "action": "deny"
+        }
+      },
+      "id": "rule_intake_placeholder_edge_bot_block_JNjnjt",
+      "conditionGroup": [
+        {
+          "conditions": [
+            {
+              "type": "path",
+              "op": "eq",
+              "value": "/intake"
+            },
+            {
+              "type": "user_agent",
+              "op": "re",
+              "value": "bot|Bot|crawler|spider|scrapy|wget|python|curl|headless"
+            }
+          ]
+        }
+      ],
+      "valid": true,
+      "validationErrors": null
+    }
+  ],
+  "ips": []
+}
