@@ -54,3 +54,10 @@ yarn-error.log*
 
 # Turbopack / Turbo
 .turbo/
+
+# eve framework build and runtime artefacts
+.eve
+.workflow-data
+.nitro
+.output
+/dist
