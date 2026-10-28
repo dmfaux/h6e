@@ -26,15 +26,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      # Version comes from the package.json "packageManager" field (pnpm@11.8.0),
+      # Version comes from the package.json "packageManager" field (pnpm@11.28.8),
       # keeping CI and the Vercel build on the same pnpm as the lockfile.
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -52,6 +52,10 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Unit tests on Node's built-in runner (colocated *.test.ts files).
+      - name: Test
+        run: pnpm test
+
       # Eval gate (Task 0.9, requirement G1; ADR 0002 for the eve-native harness).
       # Runs the eval harness as a real gate. Phase 0 ships the empty frame, so
       # this passes on an empty suite but fails the build if the harness cannot
@@ -65,11 +69,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Scan for committed secrets (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

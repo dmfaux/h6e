@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { trace } from "@opentelemetry/api";
-import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
-} from "@opentelemetry/sdk-trace-base";
+  TracerProvider,
+} from "@opentelemetry/sdk-trace";
 import { tracedWhoami, WHOAMI_SPAN_NAME } from "./whoami-trace.ts";
 import { mintSession } from "../auth/session.ts";
 import type { AuthenticatedUser } from "../auth/types.ts";
@@ -18,10 +18,10 @@ import type { AuthenticatedUser } from "../auth/types.ts";
 // trace": green means tracing is wired, not absent.
 
 const exporter = new InMemorySpanExporter();
-const provider = new NodeTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+const provider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter })],
 });
-provider.register();
+trace.setGlobalTracerProvider(provider);
 
 const secret = "test-signing-secret-not-a-real-one";
 const options = { secret, requiredRole: "internal-engineering" as const };

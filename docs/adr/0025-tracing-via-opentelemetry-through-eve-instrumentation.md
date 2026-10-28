@@ -1,6 +1,6 @@
 # 0025. Tracing via OpenTelemetry through eve's instrumentation seam
 
-- **Status:** Accepted
+- **Status:** Superseded by 0027
 - **Date:** 2026-06-23
 - **Deciders:** Engineering
 

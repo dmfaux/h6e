@@ -6,7 +6,7 @@ This note records what Task 0.9 stood up and where the next phase attaches, so t
 
 - Eval harness: the eve-native `eve eval` (ADR 0002), run through a thin gate at `scripts/eval-gate.mjs` (the `pnpm eval` script). The gate runs in CI as a real gate. It passes on the empty suite but fails the build if the harness cannot run (a broken `evals/evals.config.ts`) or, once cases exist, if any eval fails. Green means wired, not absent.
 - Run-wide config: `evals/evals.config.ts` (`defineEvalConfig`). No default judge model and no external reporter yet, so the empty frame needs no model-provider credentials and no data leaves the tenant.
-- Tracing: `agent/instrumentation.ts` registers a vendor-neutral OpenTelemetry provider (ADR 0025, Accepted). The authenticated whoami path is wrapped in one real span at `src/observability/whoami-trace.ts`, proved by `src/observability/whoami-trace.test.ts`. Phase 0 exports spans to the console only (no egress, ADR 0006).
+- Tracing: eve owns the OpenTelemetry provider, configured from `agent/instrumentation/` (ADR 0027, which superseded ADR 0025). Vercel Agent Runs export is disabled. The authenticated whoami path is wrapped in one real span at `src/observability/whoami-trace.ts`, proved by `src/observability/whoami-trace.test.ts`. Phase 0 exports spans to the console only (no egress, ADR 0006).
 
 ## Where Phase 2 attaches eval cases
 
@@ -16,5 +16,5 @@ This note records what Task 0.9 stood up and where the next phase attaches, so t
 
 ## Where Phase 2 attaches recommendation traces
 
-- The recommendation (screening and ranking) path is a model turn, so eve auto-traces it as an `ai.eve.turn` span tree once it exists; no manual span is needed there, unlike the non-model whoami route. Attach per-call context (requisition, candidate reference after redaction, model and ruleset version) through the `events["step.started"]` hook in `agent/instrumentation.ts`, which rides values onto the AI-SDK spans.
+- The recommendation (screening and ranking) path is a model turn, so eve auto-traces it once it exists as an `invoke_agent <agent>` span with `agent.step` children, each holding a `chat <model>` span per model call (and `execute_tool <tool>` spans for tool calls); no manual span is needed there, unlike the non-model whoami route. Attach per-call context (requisition, candidate reference after redaction, model and ruleset version) with an `otelIntegration({ runtimeContext })` default export in a file under `agent/instrumentation/` (ADR 0027). eve calls the resolver for each model attempt and records the returned JSON values on the AI SDK spans under `ai.settings.context.*`; keys starting with `eve.` are reserved.
 - Before turning on any exporter that carries recommendation traces off-box, clear the data path under ADR 0006, and keep `recordInputs`/`recordOutputs` off until the exporter and its retention path are approved (ADR 0014). The recommendation trace itself is Phase 2 work and is explicitly not built here.

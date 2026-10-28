@@ -19,7 +19,7 @@ export default defineChannel({
   routes: [
     GET("/internal/whoami", async (request) =>
       // Wrapped so the authenticated whoami path emits a real trace
-      // (requirement G2, ADR 0025). The guard and identity logic are unchanged.
+      // (requirement G2, ADR 0027). The guard and identity logic are unchanged.
       tracedWhoami(request, {
         secret: process.env.SESSION_SECRET ?? "",
         requiredRole: ROLES.internalEngineering,

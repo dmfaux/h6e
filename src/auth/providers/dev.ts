@@ -1,7 +1,11 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { AuthProvider, Credentials, SignInResult } from "../types.ts";
 import type { DevUser, Env } from "../config.ts";
-import { isProductionConfig, parseDevUsers } from "../config.ts";
+import {
+  isProductionConfig,
+  parseDevUsers,
+  parseSessionTtlSeconds,
+} from "../config.ts";
 import { mintSession } from "../session.ts";
 import {
   AuthConfigError,
@@ -72,9 +76,7 @@ export function devProviderFromEnv(env: Env): AuthProvider {
     users: parseDevUsers(env.DEV_AUTH_USERS),
     secret: env.SESSION_SECRET ?? "",
     isProduction: isProductionConfig(env),
-    sessionTtlSeconds: env.SESSION_TTL_SECONDS
-      ? Number(env.SESSION_TTL_SECONDS)
-      : undefined,
+    sessionTtlSeconds: parseSessionTtlSeconds(env.SESSION_TTL_SECONDS),
   });
 }
 
