@@ -9,19 +9,22 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   workflowKey,
+  numberFromWorkflowKey,
   InvalidWhatsAppNumberError,
   initialLogistics,
   applyEvent,
   runEffects,
   applyAdvance,
+  ingestWith,
   STATE_FIELDS,
+  CORRELATION_WINDOW,
   type CandidateLogistics,
   type Effect,
   type InboundEvent,
 } from "./candidate-workflow.ts";
 
 // Simulate eve serializing durable state at a step boundary: the value is
-// JSON-serialized when the step completes and rehydrated when the next step (or
+// JSON-serialised when the step completes and rehydrated when the next step (or
 // a resume after a crash) reads it.
 function crossStepBoundary(state: CandidateLogistics): CandidateLogistics {
   return JSON.parse(JSON.stringify(state)) as CandidateLogistics;
@@ -167,4 +170,87 @@ test("the state holds only keys and logistics, never a candidate record", () => 
   // Print the example so the minimal shape is visible in the transcript.
   console.log("Minimal candidate workflow state shape:");
   console.log(JSON.stringify(example, null, 2));
+});
+
+// --- Review fixes (chore/stack-update) -----------------------------------
+
+test("the verified number is recoverable from the workflow key", () => {
+  assert.equal(numberFromWorkflowKey("candidate:+27821234567"), "+27821234567");
+  assert.equal(workflowKey(numberFromWorkflowKey(workflowKey("+27 82 123 4567"))), "candidate:+27821234567");
+  assert.throws(() => numberFromWorkflowKey("session:abc"), InvalidWhatsAppNumberError);
+});
+
+test("an application for a different number never rekeys an existing workflow", () => {
+  const keyed = applyEvent(initialLogistics(), {
+    kind: "application-received",
+    id: "wamid.1",
+    number: "+27821234567",
+  }).state;
+  const other = applyEvent(keyed, {
+    kind: "application-received",
+    id: "wamid.2",
+    number: "+27829999999",
+  });
+  assert.equal(other.state.key, "candidate:+27821234567");
+  assert.deepEqual(other.effects, []);
+  assert.deepEqual(other.state.processedEvents, ["wamid.1"]);
+});
+
+test("dedup and effect bookkeeping are bounded to the correlation window", async () => {
+  let state = initialLogistics();
+  for (let i = 0; i < CORRELATION_WINDOW + 5; i++) {
+    state = applyEvent(state, { kind: "handover-requested", id: `wamid.${i}` }).state;
+  }
+  assert.equal(state.processedEvents.length, CORRELATION_WINDOW);
+  assert.equal(state.processedEvents[0], "wamid.5");
+  assert.equal(state.processedEvents.at(-1), `wamid.${CORRELATION_WINDOW + 4}`);
+  // The newest ids still deduplicate; the oldest fell out of the window.
+  assert.deepEqual(applyEvent(state, { kind: "handover-requested", id: `wamid.${CORRELATION_WINDOW + 4}` }).effects, []);
+
+  const effects: Effect[] = Array.from({ length: CORRELATION_WINDOW + 5 }, (_, i) => ({ id: `e${i}`, kind: "x" }));
+  const after = await runEffects(initialLogistics(), effects, () => {});
+  assert.equal(after.completedEffects.length, CORRELATION_WINDOW);
+  assert.equal(after.completedEffects[0], "e5");
+});
+
+// An in-memory stand-in for the durable `defineState` slot, driven exactly as
+// `ingest` drives the real one.
+function memoryHandle(initial: CandidateLogistics = initialLogistics()) {
+  let value = initial;
+  return {
+    get: () => value,
+    update: (fn: (s: CandidateLogistics) => CandidateLogistics) => {
+      value = fn(value);
+    },
+  };
+}
+
+test("a failed acknowledgement is not recorded, so a redelivery retries it", async () => {
+  const slot = memoryHandle();
+  const event: InboundEvent = { kind: "application-received", id: "wamid.ACK", number: "+27821234567" };
+
+  await assert.rejects(
+    ingestWith(slot, event, async () => {
+      throw new Error("Cloud API 503");
+    }),
+    /Cloud API 503/,
+  );
+  assert.deepEqual(slot.get().processedEvents, []);
+  assert.deepEqual(slot.get().completedEffects, []);
+
+  const performed: string[] = [];
+  const after = await ingestWith(slot, event, async (e) => {
+    performed.push(e.kind);
+  });
+  assert.deepEqual(performed, ["workflow-started"]);
+  assert.deepEqual(after.processedEvents, ["wamid.ACK"]);
+  assert.deepEqual(after.completedEffects, ["started:candidate:+27821234567"]);
+  assert.deepEqual(slot.get(), after);
+
+  // The same delivery again performs nothing and changes nothing.
+  const replay = await ingestWith(slot, event, async (e) => {
+    performed.push(e.kind);
+  });
+  assert.deepEqual(performed, ["workflow-started"]);
+  assert.deepEqual(replay, after);
 });

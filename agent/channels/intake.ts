@@ -1,42 +1,77 @@
 import { defineChannel, GET, POST } from "eve/channels";
+import {
+  acceptInbound,
+  resolveRole,
+  roleCatalogFromEnv,
+  verifySubscription,
+} from "../../src/channel/whatsapp.ts";
 
-// The public intake placeholder (Task 0.7, requirement F1). This is the only
-// internet-facing, unauthenticated surface the agent exposes besides liveness:
-// it occupies the URL Phase 1's WhatsApp and Teams intake and webhook ingress
-// will later use (ADR 0010), and nothing more. It is a placeholder by design.
+// Task 1.3: the live WhatsApp webhook surface (requirements A1, I1, I2, I3;
+// ADRs 0010, 0026). This is the Phase 0 `/intake` placeholder turned live, on
+// the same URL behind the same Vercel WAF and bot protection (docs/phase-0/
+// edge-protection.md, firewall-config.json: the rule keys on `path eq /intake`).
 //
-// It carries no intake logic, no webhook verification, no channel or messaging
-// logic, and no candidate-data handling. All of that is Phase 1 (ADR 0010),
-// which turns this surface into verified channel ingress sitting behind the same
-// edge protection. In Phase 0 the route returns a static placeholder response so
-// the surface is reachable and provable, and so the edge protection (Vercel WAF
-// and bot challenge) has something to sit in front of.
+// Verification sits at ingress, behind the edge (ADR 0010): every inbound POST
+// is checked against Meta's X-Hub-Signature-256 over the raw bytes before
+// anything is parsed or processed, and a forged or unsigned event is refused
+// (403) and never reaches a workflow. The verification, parsing and role
+// resolution are pure functions in src/channel/whatsapp.ts, proven by
+// src/channel/whatsapp.test.ts.
 //
-// Edge protection is configured at the platform, not in this handler: Vercel's
-// WAF custom rules and bot-challenge run at the edge before a request reaches
-// this code (requirement F2). That keeps the placeholder free of any
-// application-level filtering, which is the point of doing it at the edge.
+// Fail closed, pending ADR 0029. A verified application is not handed to the
+// durable candidate workflow from here. The only way into a durable eve session
+// is a message send, and a send starts a model turn: the candidate's delivery
+// would reach a model (ADR 0006, ADR 0014; Phase 1 makes no model call), and a
+// turn a hook cancels before the model discards the `defineState` writes made
+// in it, so neither path reaches `ingest` durably (evidence in ADR 0029). Until
+// that ADR is accepted, this route verifies, parses and counts, answers Meta
+// 200 so a verified event is not redelivered as a storm, and processes nothing:
+// no session, no acknowledgement, no model. The gap is recorded in
+// docs/phase-1/task-1.3-blocker.md and Task 1.3 is partial.
+//
+// Boundary (Task 1.3): verified ingress only. No FAQ or free-text understanding
+// (Task 1.4), no documents (Task 1.5), no scheduling (Task 1.7), no model call.
+// Secrets are read from the environment, never compiled in. Log lines carry
+// counts and outcomes, never a number.
 
-const placeholder = () =>
-  new Response(
-    JSON.stringify({
-      ok: true,
-      surface: "public-intake-placeholder",
-      phase: 0,
-      note: "Placeholder only. No intake, webhook, or channel logic. Phase 1 (ADR 0010) makes this a verified channel ingress behind the same WAF and bot protection.",
-    }),
-    {
-      status: 200,
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": "no-store",
-      },
-    },
-  );
+const appSecret = () => process.env.WHATSAPP_APP_SECRET ?? "";
+const verifyToken = () => process.env.WHATSAPP_VERIFY_TOKEN ?? "";
 
 export default defineChannel({
   routes: [
-    GET("/intake", async () => placeholder()),
-    POST("/intake", async () => placeholder()),
+    // Meta webhook verify-token handshake. Echo hub.challenge only when the
+    // configured per-environment verify token matches; otherwise refuse.
+    GET("/intake", async (request) => {
+      const challenge = verifySubscription(new URL(request.url).searchParams, verifyToken());
+      return challenge === null
+        ? new Response("forbidden", { status: 403 })
+        : new Response(challenge, {
+            status: 200,
+            headers: { "content-type": "text/plain; charset=utf-8" },
+          });
+    }),
+
+    // Inbound webhook. Verify authenticity over the raw bytes, then (for now)
+    // only account for what arrived.
+    POST("/intake", async (request) => {
+      const raw = new Uint8Array(await request.arrayBuffer());
+      const decision = acceptInbound(raw, request.headers.get("x-hub-signature-256"), appSecret());
+      if (!decision.ok) {
+        // Failed verification: rejected and never processed (ADR 0010).
+        return new Response("forbidden", { status: 403 });
+      }
+
+      const catalog = roleCatalogFromEnv();
+      const applications = decision.applications.filter(
+        (application) => resolveRole(application.requisitionRef, catalog) !== null,
+      ).length;
+      console.warn(
+        `[intake] ${applications} verified application(s) received; not processed: candidate workflow path pending ADR 0029`,
+      );
+      return new Response(JSON.stringify({ ok: true, processed: 0 }), {
+        status: 200,
+        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+      });
+    }),
   ],
 });

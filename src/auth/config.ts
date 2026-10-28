@@ -27,6 +27,24 @@ export function isProductionConfig(env: Env): boolean {
   );
 }
 
+// SESSION_TTL_SECONDS is optional; unset or blank means the session default.
+// Anything else must be a positive whole number of seconds, or every minted
+// session would carry a non-numeric expiry and be dead on arrival.
+export function parseSessionTtlSeconds(
+  raw: string | undefined,
+): number | undefined {
+  if (raw === undefined || raw.trim() === "") {
+    return undefined;
+  }
+  const ttl = Number(raw);
+  if (!Number.isInteger(ttl) || ttl <= 0) {
+    throw new AuthConfigError(
+      `SESSION_TTL_SECONDS must be a positive whole number of seconds, got "${raw}"`,
+    );
+  }
+  return ttl;
+}
+
 export function parseDevUsers(raw: string | undefined): DevUser[] {
   if (raw === undefined || raw.trim() === "") {
     return [];

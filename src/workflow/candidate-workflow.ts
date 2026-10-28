@@ -11,8 +11,8 @@
 // Honours: ADR 0002 (durability is eve's session plus `defineState`, not a
 // hand-rolled store or a bespoke workflow engine), ADR 0010 (idempotent,
 // correlated ingress), ADR 0006 and ADR 0012 (minimal logistics state only, no
-// candidate record duplicated, no decision-or-status state held), ADR 0011 (the
-// candidate's identity is the WhatsApp number).
+// candidate record duplicated, no decision-or-status state held), ADR 0003 (the
+// candidate's identity is the WhatsApp number, not a login).
 //
 // Boundary (Task 1.2): this module is the correlation and durability machinery
 // only. It wires no channel (Task 1.3), no FAQ or handover behaviour (Task 1.4),
@@ -74,7 +74,7 @@ export const STATE_FIELDS = [
   "completedEffects",
 ] as const;
 
-// --- Workflow key derivation (E1; ADR 0011) -----------------------------
+// --- Workflow key derivation (E1; ADR 0003) -----------------------------
 //
 // The verified WhatsApp number is the per-candidate workflow key: the channel's
 // continuation token (Task 1.3) and the correlation key are one and the same, so
@@ -101,6 +101,26 @@ function normalizeE164(raw: string): string {
 
 export function workflowKey(verifiedWhatsAppNumber: string): string {
   return `candidate:${normalizeE164(verifiedWhatsAppNumber)}`;
+}
+
+const KEY_PREFIX = "candidate:";
+
+// The inverse. The channel uses the round trip to validate a sender at parse
+// time (a number that cannot key a workflow is dropped there), and a durable
+// run keyed on the workflow key reads its number back from the key rather than
+// carrying it in every delivery (ADR 0029).
+export function numberFromWorkflowKey(key: string): string {
+  const number = key.startsWith(KEY_PREFIX) ? key.slice(KEY_PREFIX.length) : "";
+  return normalizeE164(number);
+}
+
+// How many recent event ids and effect ids a session keeps for dedup and resume
+// safety. Meta redelivers within hours, never across hundreds of later messages,
+// so a sliding window bounds the slot for the life of a multi-week session.
+export const CORRELATION_WINDOW = 200;
+
+function remember(ids: readonly string[], id: string): string[] {
+  return [...ids, id].slice(-CORRELATION_WINDOW);
 }
 
 // --- Inbound events and side effects ------------------------------------
@@ -138,11 +158,17 @@ export function applyEvent(
     return { state, effects: [] };
   }
 
-  const processedEvents = [...state.processedEvents, event.id];
+  const processedEvents = remember(state.processedEvents, event.id);
 
   switch (event.kind) {
     case "application-received": {
       const key = workflowKey(event.number);
+      // A session belongs to one number. An application for another number is
+      // a routing fault, not a rekey: refuse it, unrecorded, so the session it
+      // reached stays correlated to its own candidate.
+      if (state.key !== "" && state.key !== key) {
+        return { state, effects: [] };
+      }
       // Starting the workflow is the once-only side effect. If this number is
       // already keyed, a later application for it records the event but neither
       // restarts the workflow nor re-emits the effect: still one workflow.
@@ -175,7 +201,7 @@ export async function runEffects(
     // across that replay.
     if (next.completedEffects.includes(effect.id)) continue;
     await perform(effect);
-    next = { ...next, completedEffects: [...next.completedEffects, effect.id] };
+    next = { ...next, completedEffects: remember(next.completedEffects, effect.id) };
     // ponytail: perform-then-record leaves a crash window between the two calls;
     // the upgrade path is an idempotency key on the external call, which the
     // broker and channel own in Tasks 1.3, 1.5, and 1.7.
@@ -223,16 +249,34 @@ export const candidateLogistics = defineState<CandidateLogistics>(
   initialLogistics,
 );
 
-/** Ingest one inbound event durably: dedup, advance state, run effects once. */
-export async function ingest(
+/** The read-and-update surface of the durable slot, so `ingest` is testable. */
+export interface LogisticsSlot {
+  get(): CandidateLogistics;
+  update(fn: (state: CandidateLogistics) => CandidateLogistics): void;
+}
+
+// The event is committed only after its effects complete. A failed effect (an
+// acknowledgement the Cloud API refused) leaves the slot untouched, so the next
+// redelivery of the same message id retries it instead of being deduplicated
+// away. Effects completed before the failure are already marked completed in
+// the state that failed to commit, so a retry performs only the rest.
+export async function ingestWith(
+  slot: LogisticsSlot,
   event: InboundEvent,
   perform: (effect: Effect) => void | Promise<void>,
 ): Promise<CandidateLogistics> {
-  const { state, effects } = applyEvent(candidateLogistics.get(), event);
-  candidateLogistics.update(() => state);
-  const after = await runEffects(candidateLogistics.get(), effects, perform);
-  candidateLogistics.update(() => after);
+  const { state, effects } = applyEvent(slot.get(), event);
+  const after = await runEffects(state, effects, perform);
+  slot.update(() => after);
   return after;
+}
+
+/** Ingest one inbound event durably: dedup, advance state, run effects once. */
+export function ingest(
+  event: InboundEvent,
+  perform: (effect: Effect) => void | Promise<void>,
+): Promise<CandidateLogistics> {
+  return ingestWith(candidateLogistics, event, perform);
 }
 
 /** Inspect the current workflow state (E4). */

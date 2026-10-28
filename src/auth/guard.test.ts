@@ -104,6 +104,18 @@ test("reads the session from a cookie as well as the Authorization header", () =
   assert.deepEqual(decision.user, engineer);
 });
 
+// A cookie value that is not valid percent-encoding is a bad request, not a
+// server fault: it reads as no session.
+test("treats a malformed percent-encoded session cookie as no session", () => {
+  const request = new Request("https://agent.example/internal/whoami", {
+    headers: { cookie: "session=%E0%A4%A" },
+  });
+  const decision = guard(request, { secret });
+  assert.ok(!decision.ok);
+  assert.equal(decision.status, 401);
+  assert.equal(decision.code, "authentication_required");
+});
+
 // A missing signing secret is a deployment fault, surfaced loudly rather than
 // silently refusing every caller.
 test("throws when no signing secret is configured", () => {

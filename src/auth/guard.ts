@@ -104,7 +104,12 @@ function readCookie(header: string, name: string): string | null {
     const index = pair.indexOf("=");
     if (index === -1) continue;
     if (pair.slice(0, index).trim() === name) {
-      return decodeURIComponent(pair.slice(index + 1).trim());
+      try {
+        return decodeURIComponent(pair.slice(index + 1).trim());
+      } catch {
+        // Malformed percent-encoding is the caller's fault, not ours: no token.
+        return null;
+      }
     }
   }
   return null;

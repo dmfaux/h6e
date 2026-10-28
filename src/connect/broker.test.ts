@@ -192,6 +192,91 @@ test("a failed use is still audited (audit completeness)", async () => {
   assert.equal(used.detail.ok, false);
 });
 
+test("a refused issuance is audited before it throws", async () => {
+  const records: any[] = [];
+  const broker = createBroker({ env: ENV, getToken: fakeProvider(), onAudit: (r) => records.push(r) });
+  await assert.rejects(
+    broker.issue({
+      capability: "calendar.freebusy.read",
+      who: "test",
+      operation: "sneak a write",
+      scopes: ["Calendars.ReadWrite"],
+    }),
+    BrokerRefusalError,
+  );
+  assert.equal(records.length, 1);
+  const [refused] = records;
+  assert.equal(refused.event, "connect.credential.refused");
+  assert.equal(refused.who, "test");
+  assert.equal(refused.what, "sneak a write");
+  assert.deepEqual(refused.scope, ["Calendars.ReadWrite"]);
+  assert.equal(refused.target, "m365 (calendar.freebusy.read)");
+  assert.equal(refused.capability, "calendar.freebusy.read");
+  assert.equal(
+    refused.detail.reason,
+    'Capability "calendar.freebusy.read" does not allow scope(s): Calendars.ReadWrite. Allowed: Calendars.Read.',
+  );
+  assert.ok(!Number.isNaN(Date.parse(refused.when)), "when is an ISO timestamp");
+  assert.equal(broker.auditLog.length, 1);
+});
+
+test("a prototype key is refused as an unknown capability, and the refusal is audited", async () => {
+  const records: any[] = [];
+  const broker = createBroker({ env: ENV, getToken: fakeProvider(), onAudit: (r) => records.push(r) });
+  await assert.rejects(
+    broker.issue({ capability: "constructor" as any, who: "test", operation: "probe" }),
+    BrokerRefusalError,
+  );
+  assert.equal(records.length, 1);
+  assert.equal(records[0].event, "connect.credential.refused");
+  assert.equal(records[0].capability, "constructor");
+  assert.equal(records[0].detail.reason, "Unknown capability: constructor");
+});
+
+// --- (4b) A lease stops working at expiresAt -----------------------------
+
+test("a lease refuses to hand out its token after expiresAt", async () => {
+  const records: any[] = [];
+  const expiresAt = Date.now() - 1000;
+  const broker = createBroker({
+    env: ENV,
+    getToken: async () => ({
+      token: SECRET_TOKEN,
+      expiresAt,
+      connector: { id: "id_1", uid: "oauth/microsoft-365", type: "microsoft-365" },
+    }),
+    onAudit: (r) => records.push(r),
+  });
+  const lease = await broker.issue({
+    capability: "calendar.freebusy.read",
+    who: "scheduling-job",
+    operation: "read free/busy",
+  });
+  let closureRan = false;
+  await assert.rejects(
+    lease.use("late read", async () => {
+      closureRan = true;
+      return "never";
+    }),
+    (err: unknown) => {
+      assert.ok(err instanceof BrokerUnavailableError);
+      assert.equal(err.name, "BrokerUnavailableError");
+      assert.equal(err.retriable, true);
+      return true;
+    },
+  );
+  assert.equal(closureRan, false, "the closure never sees an expired token");
+  const refused = records.find((r) => r.event === "connect.credential.refused");
+  assert.equal(refused.who, "scheduling-job");
+  assert.equal(refused.what, "late read");
+  assert.equal(refused.capability, "calendar.freebusy.read");
+  assert.equal(
+    refused.detail.reason,
+    `Lease for "calendar.freebusy.read" expired at ${new Date(expiresAt).toISOString()}.`,
+  );
+  assert.ok(!JSON.stringify(refused).includes(SECRET_TOKEN));
+});
+
 // --- (5) Graceful degradation on a transient Connect failure (F4) -------
 
 test("a transient Connect failure surfaces as a retriable BrokerUnavailableError, no fake credential", async () => {

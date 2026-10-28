@@ -97,15 +97,42 @@ const DECISION_SCOPE = /status|stage|decision|disposition|outcome|advance|reject
 // a write scope requested against a read-only capability.
 const WRITE_SCOPE = /write|send|manage|\.readwrite|full|delete|create/i;
 
-function assertNoDecisionScope(scopes: readonly string[]): void {
-  const offending = scopes.filter((s) => DECISION_SCOPE.test(s));
+// Why a scope request must be refused, or null when it sits within the
+// capability's least-privilege set. Pure, so the broker can audit the reason
+// before it throws.
+function scopeRefusal(
+  capability: Capability,
+  requested: readonly string[],
+): string | null {
+  // Hard line first: no decision-or-status scope, ever (ADR 0012, 0004).
+  const offending = [...requested, ...capability.scopes].filter((s) =>
+    DECISION_SCOPE.test(s),
+  );
   if (offending.length > 0) {
-    throw new BrokerRefusalError(
+    return (
       `Refusing a decision-or-status scope: ${offending.join(", ")}. ` +
-        `The agent never holds a credential that can change a candidate's ` +
-        `status or outcome (ADR 0012, ADR 0004).`,
+      `The agent never holds a credential that can change a candidate's ` +
+      `status or outcome (ADR 0012, ADR 0004).`
     );
   }
+  // Least privilege: a request may not exceed the capability.
+  const overBroad = requested.filter((s) => !capability.scopes.includes(s));
+  if (overBroad.length > 0) {
+    return (
+      `Capability "${capability.name}" does not allow scope(s): ` +
+      `${overBroad.join(", ")}. Allowed: ${capability.scopes.join(", ")}.`
+    );
+  }
+  if (capability.mode === "read") {
+    const writeish = requested.filter((s) => WRITE_SCOPE.test(s));
+    if (writeish.length > 0) {
+      return (
+        `Capability "${capability.name}" is read-only; refusing write ` +
+        `scope(s): ${writeish.join(", ")} (least privilege, ADR 0009).`
+      );
+    }
+  }
+  return null;
 }
 
 // --- Errors -------------------------------------------------------------
@@ -139,9 +166,12 @@ export class BrokerUnavailableError extends Error {
 
 // One record per audited event: who, what, when, scope, target, plus the
 // named capability. Never the token value or any read payload, only that an
-// issuance or a use happened and against what.
+// issuance, a use, or a refusal happened and against what.
 export interface AuditRecord {
-  event: "connect.credential.issued" | "connect.credential.used";
+  event:
+    | "connect.credential.issued"
+    | "connect.credential.used"
+    | "connect.credential.refused";
   who: string;
   what: string;
   when: string; // ISO 8601 UTC
@@ -219,35 +249,40 @@ export function createBroker(options: BrokerOptions = {}): Broker {
   }
 
   async function issue(request: IssueRequest): Promise<Lease> {
-    const capability: Capability | undefined = CAPABILITIES[request.capability];
+    // Own keys only: a prototype key such as "constructor" is not a capability.
+    const capability: Capability | undefined = Object.hasOwn(
+      CAPABILITIES,
+      request.capability,
+    )
+      ? CAPABILITIES[request.capability]
+      : undefined;
+    const requested = request.scopes ?? [...(capability?.scopes ?? [])];
+    const target =
+      request.target ??
+      (capability ? `${capability.system} (${capability.name})` : "unknown");
+
+    // A refusal is audited like an issuance or a use (ADR 0009), before it
+    // throws and before any credential is sought.
+    const auditRefusal = (what: string, reason: string) =>
+      audit({
+        event: "connect.credential.refused",
+        who: request.who,
+        what,
+        scope: requested,
+        target,
+        capability: request.capability,
+        detail: { reason },
+      });
+
     if (!capability) {
-      throw new BrokerRefusalError(`Unknown capability: ${request.capability}`);
+      const reason = `Unknown capability: ${request.capability}`;
+      auditRefusal(request.operation, reason);
+      throw new BrokerRefusalError(reason);
     }
-
-    // Decide the scopes, then run every guard before any credential is sought.
-    const requested = request.scopes ?? [...capability.scopes];
-
-    // Hard line first: no decision-or-status scope, ever (ADR 0012, 0004).
-    assertNoDecisionScope([...requested, ...capability.scopes]);
-
-    // Least privilege: an explicit request may not exceed the capability.
-    if (request.scopes) {
-      const overBroad = requested.filter((s) => !capability.scopes.includes(s));
-      if (overBroad.length > 0) {
-        throw new BrokerRefusalError(
-          `Capability "${capability.name}" does not allow scope(s): ` +
-            `${overBroad.join(", ")}. Allowed: ${capability.scopes.join(", ")}.`,
-        );
-      }
-      if (capability.mode === "read") {
-        const writeish = requested.filter((s) => WRITE_SCOPE.test(s));
-        if (writeish.length > 0) {
-          throw new BrokerRefusalError(
-            `Capability "${capability.name}" is read-only; refusing write ` +
-              `scope(s): ${writeish.join(", ")} (least privilege, ADR 0009).`,
-          );
-        }
-      }
+    const reason = scopeRefusal(capability, requested);
+    if (reason) {
+      auditRefusal(request.operation, reason);
+      throw new BrokerRefusalError(reason);
     }
 
     const connector = env[capability.connectorEnv];
@@ -265,8 +300,6 @@ export function createBroker(options: BrokerOptions = {}): Broker {
     } catch (error) {
       throw toUnavailable(error, capability.name);
     }
-
-    const target = request.target ?? `${capability.system} (${capability.name})`;
 
     audit({
       event: "connect.credential.issued",
@@ -290,6 +323,13 @@ export function createBroker(options: BrokerOptions = {}): Broker {
       expiresAt: issued.expiresAt,
       connector: issued.connector,
       async use<T>(operation: string, fn: (token: string) => Promise<T>): Promise<T> {
+        if (Date.now() >= issued.expiresAt) {
+          const reason =
+            `Lease for "${capability.name}" expired at ` +
+            `${new Date(issued.expiresAt).toISOString()}.`;
+          auditRefusal(operation, reason);
+          throw new BrokerUnavailableError(reason, true);
+        }
         let ok = true;
         try {
           return await fn(issued.token);

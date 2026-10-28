@@ -1,14 +1,14 @@
 import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { handleWhoami, type WhoamiOptions } from "../auth/whoami.ts";
 
-// Tracing for the authenticated whoami path (requirement G2, ADR 0025). The
+// Tracing for the authenticated whoami path (requirement G2, ADR 0027). The
 // whoami route is a plain HTTP route on an eve channel, not a model turn, so
 // eve's automatic AI-SDK turn tracing does not cover it. This thin wrapper
 // opens one OpenTelemetry span around the guarded handler so the path emits a
 // real trace (a real W3C trace id, a real span), proving tracing is wired
-// rather than absent. The span is exported wherever agent/instrumentation.ts
-// registers a provider; in Phase 0 that is a local, non-exporting console
-// processor, so no trace data leaves the tenant (ADR 0006).
+// rather than absent. eve registers the provider from agent/instrumentation/;
+// its only destination is a console processor, so no trace data leaves the
+// tenant (ADR 0006).
 //
 // The span carries only non-identifying attributes (route, method, status,
 // outcome). It deliberately does not record the caller's id or email, so the
