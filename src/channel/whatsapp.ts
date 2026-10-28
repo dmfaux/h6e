@@ -295,7 +295,10 @@ export async function sendWhatsAppText(
   body: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
-  const url = `https://graph.facebook.com/v21.0/${encodeURIComponent(creds.phoneNumberId)}/messages`;
+  // Prototype (ADR 0029): an overridable base so a boot proof can point sends at
+  // a stub Graph endpoint. Unset means Meta's real endpoint.
+  const base = process.env.WHATSAPP_GRAPH_BASE_URL || "https://graph.facebook.com";
+  const url = `${base}/v21.0/${encodeURIComponent(creds.phoneNumberId)}/messages`;
   const res = await fetchImpl(url, {
     method: "POST",
     headers: {
