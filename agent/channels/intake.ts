@@ -1,48 +1,37 @@
 import { defineChannel, GET, POST } from "eve/channels";
-import {
-  acceptInbound,
-  resolveRole,
-  roleCatalogFromEnv,
-  verifySubscription,
-} from "../../src/channel/whatsapp.ts";
+import { roleCatalogFromEnv, verifySubscription } from "../../src/channel/whatsapp.ts";
+import { handleIntakePost } from "../../src/channel/intake-route.ts";
+import { deliverToCandidateRun } from "../../src/workflow/candidate-run-api.ts";
+import { currentDeploymentId, liveCandidateRunApi } from "../../src/workflow/candidate-run-runtime.ts";
+import { DEPLOYMENT_ROUTE } from "../../src/workflow/deployment.ts";
 
 // Task 1.3: the live WhatsApp webhook surface (requirements A1, I1, I2, I3;
-// ADRs 0010, 0028). This is the Phase 0 `/intake` placeholder turned live, on
-// the same URL behind the same Vercel WAF and bot protection (docs/phase-0/
-// edge-protection.md, firewall-config.json: the rule keys on `path eq /intake`).
+// ADRs 0010, 0028, 0029). This is the Phase 0 `/intake` placeholder turned
+// live, on the same URL behind the same Vercel WAF and bot protection
+// (docs/phase-0/edge-protection.md, firewall-config.json: the rule keys on
+// `path eq /intake`).
 //
 // Verification sits at ingress, behind the edge (ADR 0010): every inbound POST
 // is checked against Meta's X-Hub-Signature-256 over the raw bytes before
 // anything is parsed or processed, and a forged or unsigned event is refused
-// (403) and never reaches a workflow. The verification, parsing and role
-// resolution are pure functions in src/channel/whatsapp.ts, proven by
-// src/channel/whatsapp.test.ts.
+// (403). Each verified application with a role is keyed opaquely and handed to
+// its durable candidate run (src/workflow/candidate-run.ts): the run that
+// holds the key is resumed, or a fresh one is started. No session, no model.
 //
-// Fail closed until Task 1.3 builds the candidate run of ADR 0029. A verified application is not handed to the
-// durable candidate workflow from here. The only way into a durable eve session
-// is a message send, and a send starts a model turn: the candidate's delivery
-// would reach a model (ADR 0006, ADR 0014; Phase 1 makes no model call), and a
-// turn a hook cancels before the model discards the `defineState` writes made
-// in it, so neither path reaches `ingest` durably (evidence in ADR 0029). Until
-// that run exists, this route verifies, parses and counts, answers Meta
-// 200 so a verified event is not redelivered as a storm, and processes nothing:
-// no session, no acknowledgement, no model. The gap is recorded in
-// docs/phase-1/task-1.3-blocker.md and Task 1.3 is partial.
-//
-// Boundary (Task 1.3): verified ingress only. No FAQ or free-text understanding
-// (Task 1.4), no documents (Task 1.5), no scheduling (Task 1.7), no model call.
-// Secrets are read from the environment, never compiled in. Log lines carry
-// counts and outcomes, never a number.
-
-const appSecret = () => process.env.WHATSAPP_APP_SECRET ?? "";
-const verifyToken = () => process.env.WHATSAPP_VERIFY_TOKEN ?? "";
+// Boundary (Task 1.3): verified ingress and the acknowledgement only. No FAQ
+// or free-text understanding (Task 1.4), no documents (Task 1.5), no
+// scheduling (Task 1.7), no model call. Secrets are read from the
+// environment, never compiled in.
 
 export default defineChannel({
   routes: [
     // Meta webhook verify-token handshake. Echo hub.challenge only when the
     // configured per-environment verify token matches; otherwise refuse.
     GET("/intake", async (request) => {
-      const challenge = verifySubscription(new URL(request.url).searchParams, verifyToken());
+      const challenge = verifySubscription(
+        new URL(request.url).searchParams,
+        process.env.WHATSAPP_VERIFY_TOKEN ?? "",
+      );
       return challenge === null
         ? new Response("forbidden", { status: 403 })
         : new Response(challenge, {
@@ -51,27 +40,29 @@ export default defineChannel({
           });
     }),
 
-    // Inbound webhook. Verify authenticity over the raw bytes, then (for now)
-    // only account for what arrived.
-    POST("/intake", async (request) => {
-      const raw = new Uint8Array(await request.arrayBuffer());
-      const decision = acceptInbound(raw, request.headers.get("x-hub-signature-256"), appSecret());
-      if (!decision.ok) {
-        // Failed verification: rejected and never processed (ADR 0010).
-        return new Response("forbidden", { status: 403 });
-      }
+    POST("/intake", async (request) =>
+      handleIntakePost(new Uint8Array(await request.arrayBuffer()), request.headers.get("x-hub-signature-256"), {
+        appSecret: process.env.WHATSAPP_APP_SECRET ?? "",
+        keySecret: process.env.CANDIDATE_KEY_SECRET || null,
+        catalog: roleCatalogFromEnv(),
+        currentDeploymentId,
+        deliver: (key, delivery) => deliverToCandidateRun(key, delivery, liveCandidateRunApi),
+      }),
+    ),
 
-      const catalog = roleCatalogFromEnv();
-      const applications = decision.applications.filter(
-        (application) => resolveRole(application.requisitionRef, catalog) !== null,
-      ).length;
-      console.warn(
-        `[intake] ${applications} verified application(s) received; not processed: the ADR 0029 candidate run is not built yet`,
-      );
-      return new Response(JSON.stringify({ ok: true, processed: 0 }), {
-        status: 200,
-        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
-      });
-    }),
+    // Which deployment serves this domain right now. A candidate run fetches
+    // it on its own domain to pick the target of its 7-day self-handoff
+    // (ADR 0029, Triggers), since "latest" would undo an Instant Rollback.
+    // Public: it reveals only the deployment id, and the run has no session.
+    GET(DEPLOYMENT_ROUTE, async () =>
+      currentDeploymentId().then(
+        (deploymentId) =>
+          new Response(JSON.stringify({ deploymentId }), {
+            status: 200,
+            headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+          }),
+        () => new Response("unavailable", { status: 503 }),
+      ),
+    ),
   ],
 });

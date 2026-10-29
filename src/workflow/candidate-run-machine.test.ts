@@ -81,7 +81,7 @@ test("every message kind in every mode lands on the table", () => {
   assert.deepEqual(onMessage(afterAdvance.mode, rejected, HERE), {
     mode: SERVING,
     steps: [
-      { do: "handoff-failed", reason: "successor wrun_succ refused the state" },
+      { do: "handoff-failed", reason: "successor wrun_succ refused the state", target: THERE, held: 4 },
       { do: "process", message: delivery(THERE, "h0") },
       { do: "process", message: delivery(HERE, "h1") },
       { do: "process", message: terminate },
@@ -97,7 +97,7 @@ test("abandoning a handoff on the deadline audits and processes the held message
   assert.deepEqual(abandonHandoff(handingOff, "deadline"), {
     mode: SERVING,
     steps: [
-      { do: "handoff-failed", reason: "deadline" },
+      { do: "handoff-failed", reason: "deadline", target: THERE, held: 1 },
       { do: "process", message: delivery(THERE, "h0") },
     ],
   });

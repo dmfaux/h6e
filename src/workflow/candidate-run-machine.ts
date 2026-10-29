@@ -67,7 +67,7 @@ export const SERVING: RunMode = { mode: "serving" };
 export type Step =
   | { readonly do: "process"; readonly message: HeldMessage }
   | { readonly do: "begin-handoff"; readonly target: string }
-  | { readonly do: "handoff-failed"; readonly reason: string }
+  | { readonly do: "handoff-failed"; readonly reason: string; readonly target: string; readonly held: number }
   | { readonly do: "ignore"; readonly message: RunMessage["kind"] };
 
 export function triggersHandoff(delivery: Delivery, currentDeploymentId: string): boolean {
@@ -113,13 +113,7 @@ export function onMessage(
         case "advance":
           return { mode: { ...mode, held: [...mode.held, message] }, steps: [] };
         case "handoff.rejected":
-          return {
-            mode: SERVING,
-            steps: [
-              { do: "handoff-failed", reason: `successor ${message.successorRunId} refused the state` },
-              ...mode.held.map((held): Step => ({ do: "process", message: held })),
-            ],
-          };
+          return abandonHandoff(mode, `successor ${message.successorRunId} refused the state`);
         case "handoff.commit":
           return { mode, steps: [{ do: "ignore", message: message.kind }] };
       }
@@ -131,7 +125,10 @@ export function abandonHandoff(mode: RunMode, reason: string): { mode: RunMode; 
   if (mode.mode !== "handing-off") return { mode, steps: [] };
   return {
     mode: SERVING,
-    steps: [{ do: "handoff-failed", reason }, ...mode.held.map((held): Step => ({ do: "process", message: held }))],
+    steps: [
+      { do: "handoff-failed", reason, target: mode.target, held: mode.held.length },
+      ...mode.held.map((held): Step => ({ do: "process", message: held })),
+    ],
   };
 }
 
@@ -163,6 +160,25 @@ export const INTERVALS: Intervals = {
   idleExpiryMs: IDLE_EXPIRY_MS,
   handoffDeadlineMs: HANDOFF_DEADLINE_MS,
 };
+
+// The handoff interval may be shortened for a preview proof of the 7-day
+// timer (ADR 0029 Consequences), never in production, where a mis-set value
+// would churn every run or strand fixes. The idle window is not overridable:
+// changing it is a change to ADR 0030.
+export function intervalsFromEnv(env: Record<string, string | undefined>): Intervals {
+  const override = Number(env.CANDIDATE_HANDOFF_INTERVAL_MS);
+  const allowed = env.VERCEL_ENV !== "production" && Number.isInteger(override) && override > 0;
+  return allowed ? { ...INTERVALS, handoffMs: override } : INTERVALS;
+}
+
+// The lowest Workflow spec version whose runtime understands being taken
+// over by `createHook({ experimental_force: true })` (the SDK's
+// SPEC_VERSION_SUPPORTS_HOOK_FORCE_CLAIM, "started at spec version 8 or
+// later" in create-hook.d.ts). A successor started across deployments is
+// stamped at least here, or it could never itself be taken over. eve's
+// ambient `workflow` modules do not export the constant, so it is pinned
+// and candidate-run-pins.test.ts checks it against the vendored SDK.
+export const HOOK_FORCE_CLAIM_SPEC_VERSION = 8;
 
 export function idleExpiryAt(lastActivityAt: number, intervals: Intervals): number {
   return lastActivityAt + intervals.idleExpiryMs;
