@@ -222,12 +222,10 @@ try {
   );
 
   // No model turn anywhere: no invoke_agent or chat span, while workflow spans do print.
-  const spanLines = log.filter((l) => /^\s*name: /.test(l) || l.includes("invoke_agent") || l.includes("chat anthropic"));
   const modelSpans = log.filter((l) => l.includes("invoke_agent") || l.includes("chat anthropic") || /name: ['"]chat /.test(l));
   const workflowSpans = log.filter((l) => /name: ['"](workflow\.run|step\.execute|hook\.resume|workflow\.start)/.test(l));
   check(modelSpans.length === 0, `no invoke_agent or chat span in the server log (${modelSpans.length} found)`);
   check(workflowSpans.length > 0, `workflow spans were exported, so the absence above is meaningful (${workflowSpans.length} seen)`);
-  void spanLines;
 
   // Logs name no number and no raw message id.
   const leaks = log.filter((l) => /\+?2782000000[123]/.test(l) || l.includes("wamid.proof")).filter((l) => !/name: /.test(l));
@@ -236,10 +234,8 @@ try {
 
   console.log("\n--- intake and run log lines ---");
   for (const line of log.filter((l) => l.includes("[intake]") || l.includes("[candidate-run]") || l.startsWith("AUDIT "))) console.log(line);
-  const bootLine = log.find((l) => l.includes("[candidate-run] boot"));
   console.log("\n--- example span names ---");
   for (const name of new Set(workflowSpans.map((l) => l.trim()))) console.log(name);
-  void bootLine;
 } catch (error) {
   check(false, `proof aborted: ${error instanceof Error ? error.message : String(error)}`);
   console.log("\n--- last 40 server log lines ---");

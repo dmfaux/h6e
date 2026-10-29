@@ -102,12 +102,17 @@ async function tokenConflict(hook: Hook<RunMessage>): Promise<string | null> {
   }
 }
 
+// An error message can echo the number (a Cloud API refusal quotes the
+// recipient), and it goes into an audit record, so digit runs are scrubbed.
 function describe(error: unknown): string {
+  let text: string;
   if (typeof error === "object" && error !== null && "name" in error && typeof error.name === "string") {
     const message = "message" in error && typeof error.message === "string" ? error.message : "";
-    return `${error.name}: ${message}`;
+    text = `${error.name}: ${message}`;
+  } else {
+    text = String(error);
   }
-  return String(error);
+  return text.replace(/\+?\d{8,15}/g, "[digits]");
 }
 
 export async function candidateRun(input: CandidateRunInput): Promise<CandidateRunResult> {
