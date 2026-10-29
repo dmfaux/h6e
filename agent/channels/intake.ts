@@ -10,6 +10,7 @@ import {
   deliverToCandidateRun,
   handOverCandidateRun,
   inspectCandidateRun,
+  readCandidateRun,
 } from "../../src/workflow/candidate-run-api.ts";
 
 // Task 1.3: the live WhatsApp webhook surface (requirements A1, I1, I2, I3;
@@ -87,6 +88,15 @@ export default defineChannel({
       const key = prototypeKey(request);
       if (key === null) return new Response("forbidden", { status: 403 });
       return json(await inspectCandidateRun(key));
+    }),
+
+    GET("/prototype/run-by-id", async (request) => {
+      const url = new URL(request.url);
+      const runId = url.searchParams.get("runId");
+      if (request.headers.get("x-prototype-secret") !== appSecret() || appSecret() === "" || !runId) {
+        return new Response("forbidden", { status: 403 });
+      }
+      return json(await readCandidateRun(runId));
     }),
 
     // Stand-in for Meta's Graph messages endpoint so a deployment can prove a

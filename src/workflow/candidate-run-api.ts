@@ -43,6 +43,29 @@ export async function inspectCandidateRun(
   }
 }
 
+/**
+ * Prototype retention probe: read a run by id, including one that has ended,
+ * so the ADR 0027 question (are completed payloads deleted?) is answered by
+ * reading a return value hours after the run completed.
+ */
+export async function readCandidateRun(runId: string): Promise<Record<string, unknown>> {
+  const run = getRun<CandidateRunResult>(runId);
+  const out: Record<string, unknown> = { runId, readOn: process.env.VERCEL_DEPLOYMENT_ID ?? "local" };
+  const read = async (field: string, value: Promise<unknown>) => {
+    try {
+      out[field] = await value;
+    } catch (error) {
+      out[field] = { error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) };
+    }
+  };
+  await read("exists", run.exists);
+  await read("status", run.status);
+  await read("createdAt", run.createdAt);
+  await read("completedAt", run.completedAt);
+  await read("returnValue", run.returnValue);
+  return out;
+}
+
 /** Prototype spike for the Phase 2 question: end the run and read its state back. */
 export async function handOverCandidateRun(key: string): Promise<CandidateRunResult | null> {
   const owner = await inspectCandidateRun(key);

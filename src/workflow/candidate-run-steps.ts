@@ -47,7 +47,7 @@ export async function handleDelivery(
     },
   );
   console.log(
-    `[candidate-run] delivery handled: acknowledged=${acknowledged} processedEvents=${after.processedEvents.length} completedEffects=${after.completedEffects.length}`,
+    `[candidate-run] delivery handled on ${process.env.VERCEL_DEPLOYMENT_ID ?? "local"}: acknowledged=${acknowledged} processedEvents=${after.processedEvents.length} completedEffects=${after.completedEffects.length}`,
   );
   return after;
 }
