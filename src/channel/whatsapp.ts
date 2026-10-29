@@ -262,7 +262,12 @@ export async function sendWhatsAppText(
   body: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
-  const url = `https://graph.facebook.com/v21.0/${encodeURIComponent(creds.phoneNumberId)}/messages`;
+  // PROOF ONLY (proof/task-1.3-handoff): send to this deployment's fake Graph route.
+  const base =
+    process.env.PROOF_MODE === "1" && process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}/proof/fake-graph`
+      : "https://graph.facebook.com";
+  const url = `${base}/v21.0/${encodeURIComponent(creds.phoneNumberId)}/messages`;
   const res = await fetchImpl(url, {
     method: "POST",
     headers: {

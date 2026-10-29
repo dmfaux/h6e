@@ -150,7 +150,18 @@ export async function runEndedStep(runId: string): Promise<boolean> {
 
 export async function parseStateStep(input: unknown): Promise<ParsedState> {
   "use step";
+  // PROOF ONLY (proof/task-1.3-handoff): exercise Claim or refuse.
+  if (process.env.PROOF_MODE === "1" && process.env.PROOF_REFUSE_SUCCESSOR === "1") {
+    return { ok: false, reason: "proof: PROOF_REFUSE_SUCCESSOR" };
+  }
   return parseCandidateState(input);
+}
+
+// PROOF ONLY (proof/task-1.3-handoff): how long a successor sleeps before it
+// claims, to exercise the predecessor's deadline and cancel.
+export async function proofStallMsStep(): Promise<number> {
+  "use step";
+  return process.env.PROOF_MODE === "1" && process.env.PROOF_STALL_SUCCESSOR === "1" ? 12 * 60_000 : 0;
 }
 
 // One structured line per record, the same console sink the Connect broker

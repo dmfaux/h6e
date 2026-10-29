@@ -20,6 +20,7 @@ import {
   intervalsStep,
   logStep,
   parseStateStep,
+  proofStallMsStep,
   resolveServingDeploymentStep,
   resumeTokenStep,
   runEndedStep,
@@ -147,6 +148,12 @@ export async function candidateRun(input: CandidateRunInput): Promise<CandidateR
       await resumeTokenStep(key, { kind: "handoff.rejected", successorRunId: boot.runId });
       await logStep(`successor refused state key=${key} predecessor=${input.predecessorRunId} reason=${parsed.reason}`);
       return { outcome: "refused", reason: parsed.reason };
+    }
+    // PROOF ONLY (proof/task-1.3-handoff): stall past the predecessor's deadline.
+    const stallMs = await proofStallMsStep();
+    if (stallMs > 0) {
+      await logStep(`proof: successor stalling ${stallMs}ms before claiming key=${key}`);
+      await sleep(stallMs);
     }
     hook = createHook<RunMessage>({ token: key, experimental_force: true });
     const stillHeld = await tokenConflict(hook);
