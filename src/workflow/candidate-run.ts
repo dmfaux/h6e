@@ -79,6 +79,29 @@ function isForceClaimed(error: unknown): error is { claimedByRunId: string } {
   );
 }
 
+// Inside eve's workflow VM a conflicting `getConflict()` rejects with
+// HookConflictError carrying `conflictingRunId` rather than resolving with
+// the owner (the VM cannot build a Run object), which is also how eve's own
+// hook-ownership helper reads it. Both shapes resolve to the owner's run id.
+async function tokenConflict(hook: Hook<RunMessage>): Promise<string | null> {
+  try {
+    const owner = await hook.getConflict();
+    return owner ? owner.runId : null;
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      error.name === "HookConflictError" &&
+      "conflictingRunId" in error &&
+      typeof error.conflictingRunId === "string"
+    ) {
+      return error.conflictingRunId;
+    }
+    throw error;
+  }
+}
+
 function describe(error: unknown): string {
   if (typeof error === "object" && error !== null && "name" in error && typeof error.name === "string") {
     const message = "message" in error && typeof error.message === "string" ? error.message : "";
@@ -102,11 +125,11 @@ export async function candidateRun(input: CandidateRunInput): Promise<CandidateR
     // unique per World, so the loser forwards its delivery to the owner and
     // ends without doing anything else (ADR 0029, Ingress).
     hook = createHook<RunMessage>({ token: key });
-    const owner = await hook.getConflict();
+    const owner = await tokenConflict(hook);
     if (owner) {
       await resumeTokenStep(key, input.first);
-      await logStep(`duplicate start forwarded key=${key} owner=${owner.runId}`);
-      return { outcome: "duplicate-start", ownerRunId: owner.runId };
+      await logStep(`duplicate start forwarded key=${key} owner=${owner}`);
+      return { outcome: "duplicate-start", ownerRunId: owner };
     }
     state = initialState(key, input.first.number, boot.now);
     pending = [input.first];
@@ -121,24 +144,25 @@ export async function candidateRun(input: CandidateRunInput): Promise<CandidateR
       return { outcome: "refused", reason: parsed.reason };
     }
     hook = createHook<RunMessage>({ token: key, experimental_force: true });
-    const stillHeld = await hook.getConflict();
+    const stillHeld = await tokenConflict(hook);
     if (stillHeld) {
       // The predecessor's runtime predates hook takeover, so the World declined.
       await resumeTokenStep(key, { kind: "handoff.rejected", successorRunId: boot.runId });
-      await logStep(`successor could not claim key=${key} holder=${stillHeld.runId}`);
+      await logStep(`successor could not claim key=${key} holder=${stillHeld}`);
       return { outcome: "refused", reason: "token could not be taken over" };
     }
     state = parsed.state;
-    pending = await awaitCommit(hook, input.predecessorRunId, intervals);
+    pending = [];
   }
 
-  const run = new Serving(key, boot, intervals, hook, state, pending);
+  const run = new Serving(key, boot, intervals, hook, state, pending, input.start === "successor" ? input.predecessorRunId : null);
   // A run ends only through journey end, idle expiry, a completed handoff, or
   // a refused or cancelled successor. Anything else that escapes the loop
   // would release the token, and the next delivery would start an empty run
   // (ADR 0029, "Never end holding the token by accident"). So an unexpected
   // failure is recorded, the body backs off, and it resumes with the state
-  // and mode it had. Only a takeover of the token by a run we did not start
+  // it had, abandoning any handoff that was in flight rather than starting a
+  // second successor. Only a takeover of the token by a run we did not start
   // ends it, because serving without the token is impossible.
   for (let failures = 0; ; ) {
     try {
@@ -149,14 +173,17 @@ export async function candidateRun(input: CandidateRunInput): Promise<CandidateR
         return run.close("token-claimed");
       }
       failures += 1;
+      const reason = describe(error);
       await auditStep({
         audit: "candidate.run.recovered",
         key,
-        reason: describe(error),
+        reason,
         at: new Date(await clockStep()).toISOString(),
         failures,
       });
       await sleep(recoveryBackoffMs(failures));
+      const closed = await run.recover(reason);
+      if (closed) return closed;
     }
   }
 }
@@ -192,6 +219,7 @@ class Serving {
   private mode: RunMode = SERVING;
   private handoffAt: number;
   private wake: Promise<void> | null = null;
+  private successorRunId: string | null = null;
 
   constructor(
     private readonly key: string,
@@ -200,11 +228,17 @@ class Serving {
     private hook: Hook<RunMessage>,
     private state: CandidateState,
     private pending: readonly HeldMessage[],
+    /** The predecessor whose commit a successor waits for before serving. */
+    private commitFrom: string | null,
   ) {
     this.handoffAt = boot.now + intervals.handoffMs;
   }
 
   async serve(): Promise<CandidateRunResult> {
+    if (this.commitFrom !== null) {
+      this.pending = await awaitCommit(this.hook, this.commitFrom, this.intervals);
+      this.commitFrom = null;
+    }
     const queued = this.pending;
     this.pending = [];
     const closed = await this.execute(queued.map((message): Step => ({ do: "process", message })));
@@ -247,6 +281,7 @@ class Serving {
   // result when the run ends, null when it goes back to serving.
   private async handOff(target: string): Promise<CandidateRunResult | null> {
     const successorRunId = await startSuccessorStep(this.boot.workflowId, this.key, this.state, this.boot.runId, target);
+    this.successorRunId = successorRunId;
     const deadline = sleep(this.intervals.handoffDeadlineMs);
     for (;;) {
       let woke: Wake;
@@ -269,8 +304,8 @@ class Serving {
           // token is free. Retake it without force; if a run we did not start
           // got there first, it is the candidate's run now and gets what we held.
           this.hook = createHook<RunMessage>({ token: this.key });
-          const holder = await this.hook.getConflict();
-          if (holder) return this.commit(holder.runId);
+          const holder = await tokenConflict(this.hook);
+          if (holder) return this.commit(holder);
         }
         return this.backToServing("successor did not claim within the deadline");
       }
@@ -295,6 +330,7 @@ class Serving {
   }
 
   private async backToServing(reason: string): Promise<CandidateRunResult | null> {
+    this.successorRunId = null;
     const next = abandonHandoff(this.mode, reason);
     this.mode = next.mode;
     const closed = await this.execute(next.steps);
@@ -302,6 +338,22 @@ class Serving {
     // The next trigger is a delivery from a newer deployment or the next timer.
     this.handoffAt = (await clockStep()) + this.intervals.handoffMs;
     return null;
+  }
+
+  // After an unexpected failure: a handoff that was in flight is abandoned,
+  // its successor cancelled on a best-effort basis, and the held messages
+  // processed here, so the retry never starts a second successor. The next
+  // trigger retries the handoff.
+  async recover(reason: string): Promise<CandidateRunResult | null> {
+    if (this.mode.mode !== "handing-off") return null;
+    if (this.successorRunId !== null) {
+      try {
+        await cancelRunStep(this.successorRunId, `candidate run recovered: ${reason}`);
+      } catch (error) {
+        await logStep(`could not cancel successor ${this.successorRunId}: ${describe(error)}`);
+      }
+    }
+    return this.backToServing(`recovered from ${reason}`);
   }
 
   private async execute(steps: readonly Step[]): Promise<CloseReason | null> {
