@@ -138,3 +138,17 @@ test("a deployment id that cannot be resolved answers 503 and delivers nothing",
   assert.equal(res.status, 503);
   assert.deepEqual(delivered, []);
 });
+
+test("a delivery failure that echoes a number is logged without it", async () => {
+  const { d, logs } = deps({
+    deliver: async () => {
+      throw new Error("resume failed for +27820000001");
+    },
+  });
+  const body = payload([{ number: "27820000001", id: "wamid.F", ref: "REQ-1" }]);
+  const res = await handleIntakePost(body, sign(body), d);
+  assert.equal(res.status, 503);
+  assert.deepEqual(logs, [
+    "[intake] 0/1 accepted (); failed: Error (resume failed for [digits])",
+  ]);
+});

@@ -84,10 +84,13 @@ export async function handleIntakePost(
   return json({ ok: true, processed: accepted.length }, 200);
 }
 
+// A runtime error message can echo what it was given, so digit runs are
+// scrubbed the same way the run scrubs its recovery records.
 function name(error: unknown): string {
+  let text = String(error);
   if (typeof error === "object" && error !== null && "name" in error && typeof error.name === "string") {
     const message = "message" in error && typeof error.message === "string" ? error.message : "";
-    return message ? `${error.name} (${message})` : error.name;
+    text = message ? `${error.name} (${message})` : error.name;
   }
-  return String(error);
+  return text.replace(/\+?\d{8,15}/g, "[digits]");
 }
