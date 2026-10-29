@@ -55,10 +55,10 @@ Each ADR is a single markdown file named `NNNN-short-slug.md`, copied from `temp
 | [0023](0023-entra-app-roles-as-internal-role-source.md) | Entra app-role claims as the single source of internal roles | Accepted |
 | [0024](0024-ci-cd-on-github-actions-with-vercel-integration.md) | CI/CD on GitHub Actions with the Vercel GitHub integration | Accepted |
 | [0025](0025-tracing-via-opentelemetry-through-eve-instrumentation.md) | Tracing via OpenTelemetry through eve's instrumentation seam | Superseded by 0027 |
-| [0026](0026-whatsapp-candidate-channel-transport.md) | WhatsApp candidate channel transport over Meta's Business Cloud API | Accepted |
+| [0026](0026-whatsapp-candidate-channel-transport.md) | WhatsApp candidate channel transport over Meta's Business Cloud API | Superseded by 0028 |
 | [0027](0027-tracing-through-eve-instrumentation-directory.md) | Tracing through eve's instrumentation directory | Accepted |
-| [0028](0028-whatsapp-channel-on-the-chat-sdk-adapter.md) | WhatsApp channel: keep the custom channel over the Chat SDK adapter | Proposed |
+| [0028](0028-whatsapp-channel-on-the-chat-sdk-adapter.md) | WhatsApp channel: keep the custom channel over the Chat SDK adapter | Accepted |
 | [0029](0029-candidate-ingress-without-a-model-turn.md) | Candidate ingress without a model turn | Proposed |
-| [0030](0030-candidate-session-idle-timeout-and-durability.md) | Candidate session idle timeout and durability | Proposed |
+| [0030](0030-candidate-workflow-lifetime-and-idle-expiry.md) | Candidate workflow lifetime and idle expiry | Proposed |
 
 Keep this table in sync when you add or change an ADR.

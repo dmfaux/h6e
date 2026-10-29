@@ -1,9 +1,9 @@
 # 0028. WhatsApp channel: keep the custom channel over the Chat SDK adapter
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-28
 - **Deciders:** Project lead, engineering, legal
-- **Supersedes:** 0026 (when accepted)
+- **Supersedes:** 0026
 
 ## Context
 
@@ -25,7 +25,7 @@ We keep the candidate WhatsApp channel as a custom eve channel over Meta's Whats
 
 The channel code stays ours: verification, message send, and later media download and template handling. That cost is unchanged from ADR 0026. The adapter remains a candidate for Phase 2, when candidate turns do reach a model through the redacting broker (ADR 0014) and the state store, history and logging questions can be answered under ADR 0006 with a retention decision behind them. Re-evaluating then is a channel-layer change behind the same workflow and auth seams.
 
-Until a human accepts this ADR, ADR 0026 stays Accepted and in force, and the channel code is unchanged by this proposal.
+ADR 0026 is superseded by this ADR. The channel code is unchanged by it, because the decision is the same.
 
 ## Alternatives considered
 
