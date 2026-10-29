@@ -11,7 +11,7 @@ import { createHmac } from "node:crypto";
 import {
   acceptInbound,
   acknowledgement,
-  correlateApplication,
+  applicationEvent,
   parseInboundApplications,
   resolveRole,
   roleCatalogFromEnv,
@@ -19,12 +19,28 @@ import {
   verifyMetaSignature,
   verifySubscription,
   whatsAppCredentialsFromEnv,
+  type InboundApplication,
   type IngressDecision,
   type RoleCatalog,
 } from "./whatsapp.ts";
-import { initialLogistics } from "../workflow/candidate-workflow.ts";
+import { ingest, initialState, type CandidateState, type Effect } from "../workflow/candidate-workflow.ts";
+import { candidateKey, messageIdHash } from "../workflow/candidate-key.ts";
 
 const APP_SECRET = "per-environment-app-secret-not-committed";
+const KEY_SECRET = "per-environment-candidate-key-secret";
+const T0 = 1_700_000_000_000;
+
+// What the run's delivery step does with a verified application: key it, hash
+// the message id, and ingest the event with the acknowledgement as the effect.
+function correlate(
+  state: CandidateState | null,
+  app: InboundApplication,
+  role: string,
+  perform: (effect: Effect) => void | Promise<void>,
+): Promise<CandidateState> {
+  const before = state ?? initialState(candidateKey(app.number, KEY_SECRET), app.number, T0);
+  return ingest(before, applicationEvent(app, role, messageIdHash(app.messageId, KEY_SECRET), T0 + 1), perform);
+}
 
 function sign(body: string, secret = APP_SECRET): string {
   return "sha256=" + createHmac("sha256", secret).update(body, "utf8").digest("hex");
@@ -88,14 +104,15 @@ test("a valid signed event is verified, parsed, and correlated to a workflow", a
   assert.equal(role, "Warehouse Picker");
 
   const acks: string[] = [];
-  const result = await correlateApplication(initialLogistics(), app, role!, (e) => {
+  const result = await correlate(null, app, role!, (e) => {
     acks.push(e.role);
   });
-  // Correlated: the durable state is keyed on the verified number (ADR 0011),
-  // and the message id is recorded so a redelivery is a no-op.
-  assert.equal(result.state.key, "candidate:+27821234567");
-  assert.deepEqual(result.state.processedEvents, ["wamid.HBgABC"]);
-  assert.equal(result.acknowledged, true);
+  // Correlated: the run is keyed on the opaque key of the verified number
+  // (ADR 0029), and the hashed message id is recorded so a redelivery is a no-op.
+  assert.equal(result.key, candidateKey("+27821234567", KEY_SECRET));
+  assert.match(result.key, /^candidate:[0-9a-f]{64}$/);
+  assert.deepEqual(result.processedEvents, [messageIdHash("wamid.HBgABC", KEY_SECRET)]);
+  assert.equal(result.processedEvents[0].includes("wamid"), false);
   assert.deepEqual(acks, ["Warehouse Picker"]);
 });
 
@@ -130,7 +147,7 @@ test("a rejected event drives no acknowledgement", async () => {
   if (decision.ok) {
     // Not reached: the guard returned ok:false, so processing never starts.
     for (const app of decision.applications) {
-      await correlateApplication(initialLogistics(), app, "X", () => {
+      await correlate(null, app, "X", () => {
         acked++;
       });
     }
@@ -152,15 +169,14 @@ test("a replayed valid event causes no duplicate acknowledgement", async () => {
     acks++;
   };
 
-  const first = await correlateApplication(initialLogistics(), app, role, perform);
+  const first = await correlate(null, app, role, perform);
   assert.equal(acks, 1);
-  assert.equal(first.acknowledged, true);
 
   // Meta redelivers the same webhook (at-least-once). Same message id, so the
-  // workflow dedups it: no second workflow, no second acknowledgement.
-  const replay = await correlateApplication(first.state, app, role, perform);
+  // run dedups it: no second run, no second acknowledgement.
+  const replay = await correlate(first, app, role, perform);
   assert.equal(acks, 1); // still one
-  assert.equal(replay.acknowledged, false);
+  assert.deepEqual(replay, first);
 });
 
 // --- (4) A new verified application is acknowledged by role name (A1) ----
@@ -173,7 +189,7 @@ test("a new verified application produces an acknowledgement that names the role
   const role = resolveRole(app.requisitionRef, CATALOG)!;
 
   let message = "";
-  await correlateApplication(initialLogistics(), app, role, (e) => {
+  await correlate(null, app, role, (e) => {
     message = acknowledgement(e.role);
   });
   assert.match(message, /Warehouse Picker/);

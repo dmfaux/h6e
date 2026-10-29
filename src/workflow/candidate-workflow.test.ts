@@ -1,256 +1,194 @@
-// Tests for the durable per-candidate workflow (Task 1.2).
+// Tests for the candidate run's state and reducer (Tasks 1.2 and 1.3).
 //
-// Deterministic, no eve runtime: the pure core carries the logic, so the four
-// behaviours are proven directly. A step boundary is simulated with a JSON
-// round-trip, which is exactly what eve does when it serializes durable state at
-// each checkpoint (ADR 0002). Run with `pnpm test src/workflow`.
+// Deterministic, no runtime: the pure core carries the logic. A step boundary
+// is simulated with a JSON round-trip, which is what the Workflow SDK does
+// when it records a step result. Run with `pnpm test src/workflow`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  workflowKey,
-  numberFromWorkflowKey,
-  InvalidWhatsAppNumberError,
-  initialLogistics,
-  applyEvent,
-  runEffects,
+  ACK_EFFECT_ID,
   applyAdvance,
-  ingestWith,
-  STATE_FIELDS,
+  applyEvent,
   CORRELATION_WINDOW,
-  type CandidateLogistics,
+  ingest,
+  initialState,
+  runEffects,
+  STATE_FIELDS,
+  terminate,
+  type CandidateState,
   type Effect,
   type InboundEvent,
 } from "./candidate-workflow.ts";
 
-// Simulate eve serializing durable state at a step boundary: the value is
-// JSON-serialised when the step completes and rehydrated when the next step (or
-// a resume after a crash) reads it.
-function crossStepBoundary(state: CandidateLogistics): CandidateLogistics {
-  return JSON.parse(JSON.stringify(state)) as CandidateLogistics;
+const KEY = "candidate:" + "ab".repeat(32);
+const NUMBER = "+27821234567";
+const T0 = 1_700_000_000_000;
+
+function fresh(): CandidateState {
+  return initialState(KEY, NUMBER, T0);
 }
 
-// --- (1) Key derivation from the verified WhatsApp number (E1) -----------
+function application(id: string, at = T0 + 1000, number = NUMBER): InboundEvent {
+  return { kind: "application-received", id, number, role: "Warehouse Picker", at };
+}
 
-test("the workflow key is derived from the verified WhatsApp number", () => {
-  assert.equal(workflowKey("+27821234567"), "candidate:+27821234567");
-});
+function crossStepBoundary(state: CandidateState): CandidateState {
+  return JSON.parse(JSON.stringify(state)) as CandidateState;
+}
 
-test("formatting differences key the same workflow (no second workflow)", () => {
-  const a = workflowKey("+27 82 123 4567");
-  const b = workflowKey("+27-82-123-4567");
-  const c = workflowKey("+27821234567");
-  assert.equal(a, c);
-  assert.equal(b, c);
-});
+// --- Idempotent dedup of a replayed event (ADR 0010) --------------------
 
-test("an unverifiable or empty number cannot key a workflow", () => {
-  assert.throws(() => workflowKey(""), InvalidWhatsAppNumberError);
-  assert.throws(() => workflowKey("not-a-number"), InvalidWhatsAppNumberError);
-  assert.throws(() => workflowKey("0821234567"), InvalidWhatsAppNumberError); // no country code
-});
+test("a replayed event creates no second acknowledgement and changes nothing", () => {
+  const first = applyEvent(fresh(), application("h1"));
+  assert.deepEqual(first.effects, [{ id: ACK_EFFECT_ID, kind: "candidate-acknowledged", role: "Warehouse Picker" }]);
+  assert.deepEqual(first.state.processedEvents, ["h1"]);
+  assert.equal(first.state.lastActivityAt, T0 + 1000);
 
-// --- (2) Idempotent dedup of a replayed event (E3, ADR 0010) ------------
-
-test("a replayed event creates no second workflow and no duplicate side effect", () => {
-  const event: InboundEvent = {
-    kind: "application-received",
-    id: "wamid.ABC",
-    number: "+27821234567",
-  };
-
-  const first = applyEvent(initialLogistics(), event);
-  assert.deepEqual(first.effects, [{ id: "started:candidate:+27821234567", kind: "workflow-started" }]);
-  assert.deepEqual(first.state.processedEvents, ["wamid.ABC"]);
-
-  // Same delivery again (at-least-once duplicate): no state change, no effect.
-  const replay = applyEvent(first.state, event);
-  assert.equal(replay.state, first.state); // unchanged reference: pure no-op
+  const replay = applyEvent(first.state, application("h1"));
+  assert.equal(replay.state, first.state);
   assert.deepEqual(replay.effects, []);
 });
 
-test("a fresh application for an already-keyed number does not restart it", () => {
-  const first = applyEvent(initialLogistics(), {
-    kind: "application-received",
-    id: "wamid.1",
-    number: "+27821234567",
-  });
-  // Different event id, same number: recorded, but no second workflow-started.
-  const again = applyEvent(first.state, {
-    kind: "application-received",
-    id: "wamid.2",
-    number: "+27821234567",
-  });
-  assert.deepEqual(again.effects, []);
-  assert.equal(again.state.key, "candidate:+27821234567");
+test("a second application from the same candidate is recorded but acknowledged at most once", async () => {
+  let acks = 0;
+  const perform = async () => {
+    acks += 1;
+  };
+  const once = await ingest(fresh(), application("h1"), perform);
+  assert.equal(acks, 1);
+  assert.deepEqual(once.completedEffects, [ACK_EFFECT_ID]);
+
+  const twice = await ingest(once, application("h2", T0 + 5000), perform);
+  assert.equal(acks, 1);
+  assert.deepEqual(twice.processedEvents, ["h1", "h2"]);
+  assert.equal(twice.lastActivityAt, T0 + 5000);
 });
 
-// --- (3) State survives a simulated step boundary (E2, ADR 0002) --------
+test("an application for a different number never rekeys a run", () => {
+  const other = applyEvent(fresh(), application("h2", T0 + 1, "+27829999999"));
+  assert.equal(other.state.number, NUMBER);
+  assert.deepEqual(other.effects, []);
+  assert.deepEqual(other.state.processedEvents, []);
+});
+
+// --- State survives a step boundary ---------------------------------------
 
 test("state and dedup survive a step boundary and keep deduplicating", () => {
-  const started = applyEvent(initialLogistics(), {
-    kind: "application-received",
-    id: "wamid.1",
-    number: "+27821234567",
-  }).state;
+  const started = applyEvent(fresh(), application("h1")).state;
   const withDocs = applyEvent(started, {
     kind: "documents-updated",
-    id: "wamid.2",
+    id: "h2",
     documents: ["id-copy", "matric-certificate"],
+    at: T0 + 2000,
   }).state;
 
-  // Checkpoint and resume from the rehydrated value.
   const resumed = crossStepBoundary(withDocs);
   assert.deepEqual(resumed.outstandingDocuments, ["id-copy", "matric-certificate"]);
-  assert.deepEqual(resumed.processedEvents, ["wamid.1", "wamid.2"]);
+  assert.deepEqual(resumed.processedEvents, ["h1", "h2"]);
 
-  // An event already processed before the boundary is still deduped after it.
   const replayAfterBoundary = applyEvent(resumed, {
     kind: "documents-updated",
-    id: "wamid.2",
+    id: "h2",
     documents: ["something-else"],
+    at: T0 + 3000,
   });
   assert.deepEqual(replayAfterBoundary.effects, []);
   assert.deepEqual(replayAfterBoundary.state.outstandingDocuments, ["id-copy", "matric-certificate"]);
 });
 
-// --- (4) A resume does not repeat a completed side effect (E2) ----------
+// --- A resume does not repeat a completed side effect ----------------------
 
 test("a completed side effect is not performed again on resume", async () => {
-  const effects: Effect[] = [{ id: "started:candidate:+27821234567", kind: "workflow-started" }];
+  const effects: Effect[] = [{ id: ACK_EFFECT_ID, kind: "candidate-acknowledged", role: "Driver" }];
   let performed = 0;
-  const perform = async (_e: Effect) => {
+  const perform = async () => {
     performed += 1;
   };
 
-  // First pass: the effect runs once and is recorded as completed.
-  const afterFirst = await runEffects(initialLogistics(), effects, perform);
+  const afterFirst = await runEffects(fresh(), effects, perform);
   assert.equal(performed, 1);
-  assert.deepEqual(afterFirst.completedEffects, ["started:candidate:+27821234567"]);
+  assert.deepEqual(afterFirst.completedEffects, [ACK_EFFECT_ID]);
 
-  // Crash and resume: the step re-runs from the checkpointed state with the
-  // same effects. The completed effect must not be performed a second time.
-  const resumed = crossStepBoundary(afterFirst);
-  const afterResume = await runEffects(resumed, effects, perform);
-  assert.equal(performed, 1); // still one: not repeated
-  assert.deepEqual(afterResume.completedEffects, ["started:candidate:+27821234567"]);
+  const afterResume = await runEffects(crossStepBoundary(afterFirst), effects, perform);
+  assert.equal(performed, 1);
+  assert.deepEqual(afterResume.completedEffects, [ACK_EFFECT_ID]);
 });
 
-// --- Engineer inspect-and-advance and terminate (E4) --------------------
+// --- Commit after effects --------------------------------------------------
 
-test("an engineer can advance logistics state and terminate the workflow", () => {
-  let s = initialLogistics();
-  s = applyAdvance(s, { type: "request-handover" });
-  assert.equal(s.handover, true);
-  s = applyAdvance(s, { type: "set-slot", slot: "booked" });
-  assert.equal(s.slot, "booked");
-
-  // Terminate, then prove a terminated workflow accepts no further events.
-  const terminated: CandidateLogistics = { ...s, terminated: true };
-  const afterEvent = applyEvent(terminated, { kind: "handover-requested", id: "wamid.X" });
-  assert.deepEqual(afterEvent.effects, []);
-  assert.equal(afterEvent.state, terminated); // unchanged: no-op
-});
-
-// --- Minimal state shape: keys + logistics only, no candidate record ----
-
-test("the state holds only keys and logistics, never a candidate record", () => {
-  const example: CandidateLogistics = applyEvent(
-    applyEvent(initialLogistics(), {
-      kind: "application-received",
-      id: "wamid.1",
-      number: "+27821234567",
-    }).state,
-    { kind: "documents-updated", id: "wamid.2", documents: ["id-copy", "matric-certificate"] },
-  ).state;
-
-  // Exactly the allowed fields, no more: a stray name/CV/ID field would fail.
-  assert.deepEqual(Object.keys(example).sort(), [...STATE_FIELDS].sort());
-
-  // Print the example so the minimal shape is visible in the transcript.
-  console.log("Minimal candidate workflow state shape:");
-  console.log(JSON.stringify(example, null, 2));
-});
-
-// --- Review fixes (chore/stack-update) -----------------------------------
-
-test("the verified number is recoverable from the workflow key", () => {
-  assert.equal(numberFromWorkflowKey("candidate:+27821234567"), "+27821234567");
-  assert.equal(workflowKey(numberFromWorkflowKey(workflowKey("+27 82 123 4567"))), "candidate:+27821234567");
-  assert.throws(() => numberFromWorkflowKey("session:abc"), InvalidWhatsAppNumberError);
-});
-
-test("an application for a different number never rekeys an existing workflow", () => {
-  const keyed = applyEvent(initialLogistics(), {
-    kind: "application-received",
-    id: "wamid.1",
-    number: "+27821234567",
-  }).state;
-  const other = applyEvent(keyed, {
-    kind: "application-received",
-    id: "wamid.2",
-    number: "+27829999999",
-  });
-  assert.equal(other.state.key, "candidate:+27821234567");
-  assert.deepEqual(other.effects, []);
-  assert.deepEqual(other.state.processedEvents, ["wamid.1"]);
-});
-
-test("dedup and effect bookkeeping are bounded to the correlation window", async () => {
-  let state = initialLogistics();
-  for (let i = 0; i < CORRELATION_WINDOW + 5; i++) {
-    state = applyEvent(state, { kind: "handover-requested", id: `wamid.${i}` }).state;
-  }
-  assert.equal(state.processedEvents.length, CORRELATION_WINDOW);
-  assert.equal(state.processedEvents[0], "wamid.5");
-  assert.equal(state.processedEvents.at(-1), `wamid.${CORRELATION_WINDOW + 4}`);
-  // The newest ids still deduplicate; the oldest fell out of the window.
-  assert.deepEqual(applyEvent(state, { kind: "handover-requested", id: `wamid.${CORRELATION_WINDOW + 4}` }).effects, []);
-
-  const effects: Effect[] = Array.from({ length: CORRELATION_WINDOW + 5 }, (_, i) => ({ id: `e${i}`, kind: "x" }));
-  const after = await runEffects(initialLogistics(), effects, () => {});
-  assert.equal(after.completedEffects.length, CORRELATION_WINDOW);
-  assert.equal(after.completedEffects[0], "e5");
-});
-
-// An in-memory stand-in for the durable `defineState` slot, driven exactly as
-// `ingest` drives the real one.
-function memoryHandle(initial: CandidateLogistics = initialLogistics()) {
-  let value = initial;
-  return {
-    get: () => value,
-    update: (fn: (s: CandidateLogistics) => CandidateLogistics) => {
-      value = fn(value);
-    },
-  };
-}
-
-test("a failed acknowledgement is not recorded, so a redelivery retries it", async () => {
-  const slot = memoryHandle();
-  const event: InboundEvent = { kind: "application-received", id: "wamid.ACK", number: "+27821234567" };
-
+test("a failed acknowledgement leaves the event uncommitted, so a redelivery retries it", async () => {
+  const before = fresh();
   await assert.rejects(
-    ingestWith(slot, event, async () => {
+    ingest(before, application("h1"), async () => {
       throw new Error("Cloud API 503");
     }),
     /Cloud API 503/,
   );
-  assert.deepEqual(slot.get().processedEvents, []);
-  assert.deepEqual(slot.get().completedEffects, []);
+  assert.deepEqual(before.processedEvents, []);
+  assert.deepEqual(before.completedEffects, []);
 
-  const performed: string[] = [];
-  const after = await ingestWith(slot, event, async (e) => {
-    performed.push(e.kind);
+  const roles: string[] = [];
+  const after = await ingest(before, application("h1"), async (e) => {
+    roles.push(e.role);
   });
-  assert.deepEqual(performed, ["workflow-started"]);
-  assert.deepEqual(after.processedEvents, ["wamid.ACK"]);
-  assert.deepEqual(after.completedEffects, ["started:candidate:+27821234567"]);
-  assert.deepEqual(slot.get(), after);
+  assert.deepEqual(roles, ["Warehouse Picker"]);
+  assert.deepEqual(after.processedEvents, ["h1"]);
+  assert.deepEqual(after.completedEffects, [ACK_EFFECT_ID]);
 
-  // The same delivery again performs nothing and changes nothing.
-  const replay = await ingestWith(slot, event, async (e) => {
-    performed.push(e.kind);
+  const replay = await ingest(after, application("h1"), async (e) => {
+    roles.push(e.role);
   });
-  assert.deepEqual(performed, ["workflow-started"]);
+  assert.deepEqual(roles, ["Warehouse Picker"]);
   assert.deepEqual(replay, after);
+});
+
+// --- Engineer advance and terminate (E4, ADR 0030) --------------------------
+
+test("an engineer can advance logistics state and a terminated run accepts no events", () => {
+  let s = fresh();
+  s = applyAdvance(s, { type: "request-handover" });
+  assert.equal(s.handover, true);
+  s = applyAdvance(s, { type: "set-slot", slot: "booked" });
+  assert.equal(s.slot, "booked");
+  s = applyAdvance(s, { type: "resolve-handover" });
+  assert.equal(s.handover, false);
+
+  const ended = terminate(s);
+  assert.equal(ended.terminated, true);
+  const afterEvent = applyEvent(ended, { kind: "handover-requested", id: "h9", at: T0 + 9 });
+  assert.deepEqual(afterEvent.effects, []);
+  assert.equal(afterEvent.state, ended);
+});
+
+// --- Minimal state shape ----------------------------------------------------
+
+test("the state holds only keys, the number, and logistics, never a candidate record", () => {
+  const example = applyEvent(
+    applyEvent(fresh(), application("h1")).state,
+    { kind: "documents-updated", id: "h2", documents: ["id-copy"], at: T0 + 2 },
+  ).state;
+  assert.deepEqual(Object.keys(example).sort(), [...STATE_FIELDS].sort());
+  assert.equal(example.schemaVersion, 1);
+  assert.equal(example.key, KEY);
+  console.log("Minimal candidate run state shape:");
+  console.log(JSON.stringify(example, null, 2));
+});
+
+test("effect ids and event ids never embed the number", () => {
+  const { state, effects } = applyEvent(fresh(), application("h1"));
+  for (const id of [...effects.map((e) => e.id), ...state.processedEvents, ...state.completedEffects]) {
+    assert.equal(id.includes("27821234567"), false, id);
+  }
+});
+
+test("dedup and effect bookkeeping are bounded to the correlation window", async () => {
+  let state = fresh();
+  for (let i = 0; i < CORRELATION_WINDOW + 5; i++) {
+    state = applyEvent(state, { kind: "handover-requested", id: `h${i}`, at: T0 + i }).state;
+  }
+  assert.equal(state.processedEvents.length, CORRELATION_WINDOW);
+  assert.equal(state.processedEvents[0], "h5");
+  assert.equal(state.processedEvents.at(-1), `h${CORRELATION_WINDOW + 4}`);
+  assert.deepEqual(applyEvent(state, { kind: "handover-requested", id: `h${CORRELATION_WINDOW + 4}`, at: T0 }).effects, []);
 });
