@@ -1,6 +1,6 @@
 # 0030. Candidate workflow lifetime and idle expiry
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-28 (rewritten 2026-10-29 for the Workflow SDK run of ADR 0029)
 - **Deciders:** Project lead, engineering, legal
 
@@ -12,7 +12,7 @@ That is a POPIA question first. ADR 0006 requires that we hold the minimum for t
 
 ## Decision
 
-Proposed: a candidate's run lives until the journey ends or the candidate has been idle for 30 days, and the end of a run is an event the workflow handles, not data loss.
+A candidate's run lives until the journey ends or the candidate has been idle for 30 days, and the end of a run is an event the workflow handles, not data loss.
 
 - **Journey end.** A run ends when the workflow is terminated (Task 1.2's `terminate`: a human-recorded outcome in the ATS such as hire, withdrawal or a reviewed rejection under ADR 0004, or an engineer's terminate under requirement E4).
 - **Idle expiry.** A run also ends when 30 days pass with no candidate delivery and no pending logistics work. Pending work means a booked interview slot still ahead, an outstanding document request, or an open chase (Task 1.10). Every item of pending work carries an absolute end date in the state (the slot time, the request's deadline, the chase's last nudge), so pending work cannot keep a run alive indefinitely. Idle time is counted from a `lastActivityAt` field in the run's state, so it carries across the 7-day handoffs of ADR 0029 instead of restarting at each one. The idle expiry time is one of the absolute times the run's single timer waits for (ADR 0029, Timers), so a run ends at its expiry, not at the next handoff after it.

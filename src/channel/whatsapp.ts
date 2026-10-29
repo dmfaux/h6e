@@ -11,7 +11,7 @@
 // proven deterministically without an eve runtime, the same way Task 1.2 proves
 // its reducer. The thin channel wrapper in agent/channels/intake.ts wires the
 // verification to the live HTTP surface; the hand-off into the durable
-// per-candidate workflow waits on ADR 0029.
+// per-candidate workflow is the run ADR 0029 describes, not yet built.
 //
 // Boundary (Task 1.3): verified ingress and a role-naming acknowledgement only.
 // No FAQ or free-text understanding (Task 1.4), no documents (Task 1.5), no

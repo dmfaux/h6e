@@ -1,6 +1,6 @@
 # 0029. Candidate ingress without a model turn
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-28 (amended 2026-10-29 after the prototype: deployment handoff, retention, opaque key)
 - **Deciders:** Project lead, engineering, legal
 
@@ -29,8 +29,6 @@ The last two are POPIA questions as much as engineering ones. How long candidate
 
 ## Decision
 
-Proposed, for a human to accept or replace.
-
 The Phase 1 candidate workflow (correlation, dedup, once-only acknowledgement, and the logistics state Tasks 1.4 to 1.7 add) runs as a durable Workflow SDK function started from the verified `/intake` route, not as an eve session turn. The Workflow SDK is the durable-execution layer of the stack we already stand on (ADR 0002), and eve itself runs on it. eve resolves the `workflow` and `workflow/api` specifiers to its vendored copy for authored code, so this adds no vendor and no new dependency. There is one live run per candidate at a time, holding the same minimal state shape (ADR 0006, ADR 0012). The eve session for a candidate is reserved for Phase 2, when candidate turns do reach a model through the redacting broker (ADR 0014). It is not created in Phase 1.
 
 **Opaque key.** The run's hook token is `candidate:` followed by an HMAC-SHA-256 of the verified E.164 number under a per-environment secret (`CANDIDATE_KEY_SECRET`). The same opaque key is the workflow key everywhere outside the run's own state. The number itself lives only in the run's state, because the acknowledgement send needs it. Hook records, run metadata, spans, logs and audit records carry the opaque key, never the number. WhatsApp message ids (`wamid.…`) are widely reported to encode the sender's number in base64, which ADR 0027's E.164 rewriter would not catch, so message ids are treated the same way: `processedEvents`, audit records and logs hold an HMAC of the message id under the same secret, never the raw id. The opaque key is pseudonymised personal information under POPIA, not anonymous data, and is handled as such.
@@ -54,7 +52,7 @@ The protocol copies the shape of eve's own session handoff (`docs/concepts/execu
 
 **Phase 2 pickup.** When Phase 2 introduces the eve session for a candidate, the session asks the run for a handover, the run pushes its state to the session, and the run completes. The state must reach the session's `defineState` through a step, never through a tool result, because a tool result goes to the model (ADR 0006, ADR 0014). eve's documentation only shows hooks inside workflow-tool runs, not a hook a session itself holds, so the exact mechanism is unproven. It is designed and proven in Phase 2. Phase 1 only keeps the state shape and hook protocol able to support it.
 
-Until this ADR is accepted, `/intake` fails closed. It verifies and parses, answers Meta 200 so a verified event is not redelivered as a storm, and processes nothing. No run or session is created, no acknowledgement is sent, and no model is called. Task 1.3 is partial.
+Until Task 1.3 builds the run this ADR describes, `/intake` fails closed. It verifies and parses, answers Meta 200 so a verified event is not redelivered as a storm, and processes nothing. No run or session is created, no acknowledgement is sent, and no model is called. Task 1.3 is partial.
 
 ## Consequences
 

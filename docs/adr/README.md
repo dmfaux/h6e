@@ -58,7 +58,7 @@ Each ADR is a single markdown file named `NNNN-short-slug.md`, copied from `temp
 | [0026](0026-whatsapp-candidate-channel-transport.md) | WhatsApp candidate channel transport over Meta's Business Cloud API | Superseded by 0028 |
 | [0027](0027-tracing-through-eve-instrumentation-directory.md) | Tracing through eve's instrumentation directory | Accepted |
 | [0028](0028-whatsapp-channel-on-the-chat-sdk-adapter.md) | WhatsApp channel: keep the custom channel over the Chat SDK adapter | Accepted |
-| [0029](0029-candidate-ingress-without-a-model-turn.md) | Candidate ingress without a model turn | Proposed |
-| [0030](0030-candidate-workflow-lifetime-and-idle-expiry.md) | Candidate workflow lifetime and idle expiry | Proposed |
+| [0029](0029-candidate-ingress-without-a-model-turn.md) | Candidate ingress without a model turn | Accepted |
+| [0030](0030-candidate-workflow-lifetime-and-idle-expiry.md) | Candidate workflow lifetime and idle expiry | Accepted |
 
 Keep this table in sync when you add or change an ADR.
