@@ -18,13 +18,13 @@ import {
 // resolution are pure functions in src/channel/whatsapp.ts, proven by
 // src/channel/whatsapp.test.ts.
 //
-// Fail closed, pending ADR 0029. A verified application is not handed to the
+// Fail closed until Task 1.3 builds the candidate run of ADR 0029. A verified application is not handed to the
 // durable candidate workflow from here. The only way into a durable eve session
 // is a message send, and a send starts a model turn: the candidate's delivery
 // would reach a model (ADR 0006, ADR 0014; Phase 1 makes no model call), and a
 // turn a hook cancels before the model discards the `defineState` writes made
 // in it, so neither path reaches `ingest` durably (evidence in ADR 0029). Until
-// that ADR is accepted, this route verifies, parses and counts, answers Meta
+// that run exists, this route verifies, parses and counts, answers Meta
 // 200 so a verified event is not redelivered as a storm, and processes nothing:
 // no session, no acknowledgement, no model. The gap is recorded in
 // docs/phase-1/task-1.3-blocker.md and Task 1.3 is partial.
@@ -66,7 +66,7 @@ export default defineChannel({
         (application) => resolveRole(application.requisitionRef, catalog) !== null,
       ).length;
       console.warn(
-        `[intake] ${applications} verified application(s) received; not processed: candidate workflow path pending ADR 0029`,
+        `[intake] ${applications} verified application(s) received; not processed: the ADR 0029 candidate run is not built yet`,
       );
       return new Response(JSON.stringify({ ok: true, processed: 0 }), {
         status: 200,

@@ -4,7 +4,7 @@ This records what blocks Task 1.3 (live WhatsApp ingress and application
 acknowledgement), in the same fail-closed pattern as the Phase 0 Connect blocker
 (`docs/phase-0/task-0.6-blocker.md`): the machinery is built and proven
 deterministically, and what cannot be exercised is recorded rather than faked.
-There are two blockers. One is a code decision (ADR 0029). One is provisioning.
+There are two blockers. One is code still to build (the run ADR 0029 decides). One is provisioning.
 
 ## What is built and proven
 
@@ -41,9 +41,9 @@ candidate's number, while nothing ran `ingest`. A hook that cancels the turn
 before the model was tried and discarded: eve throws away the `defineState`
 writes made in a cancelled turn, so the next delivery for the same number
 started the workflow again and sent a second acknowledgement. The evidence and
-the options are in ADR 0029 (Proposed).
+the decision are in ADR 0029 (Accepted 2026-10-29).
 
-Until ADR 0029 is accepted the route fails closed: it verifies and parses,
+Until the run ADR 0029 describes is built, the route fails closed: it verifies and parses,
 answers Meta 200 so a verified event is not redelivered as a storm, logs a count,
 and processes nothing. No session is created, no acknowledgement is sent, no
 model is called. This is why Task 1.3 is partial.
@@ -91,8 +91,8 @@ the number and credentials above.
 
 ## To unblock
 
-1. Decide ADR 0029 (candidate ingress without a model turn). On acceptance,
-   build the durable per-candidate run it describes, wire `/intake` to start or
+1. Build the durable per-candidate run ADR 0029 (Accepted) describes, with the
+   deployment handoff, retention 0 and opaque key, wire `/intake` to start or
    resume it, and prove by booting the build that a signed application reaches
    `ingest`, a redelivery sends no second acknowledgement, and no `chat` span
    appears.
