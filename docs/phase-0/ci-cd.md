@@ -25,6 +25,10 @@ CI installs with `pnpm install --frozen-lockfile --config.minimumReleaseAge=0`. 
 
 Vercel Standard Protection (the SSO gate at the edge) is turned off for this project so the agent's unauthenticated liveness endpoint `GET /eve/v1/health` is publicly reachable on preview and production, as it is locally (requirement C1, B1). The real gate for internal agent routes is the app-layer auth in the eve channel (Tasks 0.3, 0.5), and the deliberate public edge surface with Vercel WAF and Bot ID is built in Task 0.7. This keeps the Phase 0 liveness check honestly public rather than hidden behind preview SSO.
 
+## Production deployment expiry (load-bearing, ADR 0029)
+
+The Vercel project keeps production deployments for 30 days (`deploymentExpiration.expirationDaysProduction: 30`). Candidate runs (ADR 0029) execute on the deployment that started them and hand themselves to the serving deployment at most 7 days later, so this setting holds live candidate state. Do not shorten it below 14 days without revisiting ADR 0029. The serving deployment is read from `GET /candidate-run/deployment` on the environment's own domain.
+
 ## B4 (deferred follow-up)
 
 B4 (the deploy verifies the agent booted, not just built, before being reported healthy) is P1 and is deferred as an automated gate. The current deploy is verifiably healthy by hand: the preview returns HTTP 200 with `{"ok":true,"status":"ready",...}` on `GET /eve/v1/health`, which only succeeds if the agent booted, not merely built. What is not yet automated is making a failed boot fail the deploy: Vercel reports a deployment Ready on a successful build and does not curl the liveness endpoint. Follow-up: add a post-deployment health gate (a workflow on the Vercel `deployment_status` event, or a Vercel deploy-time check) that hits the liveness endpoint and marks the deployment failed if it is not healthy. Tracked for a Phase 0 follow-up; the realignment tasks (0.4, 0.11) revisit it.
