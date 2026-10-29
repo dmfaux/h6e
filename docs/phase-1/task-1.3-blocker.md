@@ -21,7 +21,7 @@ There are two blockers. One is a code decision (ADR 0029). One is provisioning.
 - Role-naming acknowledgement (A1): resolved from a structured requisition
   reference (a click-to-WhatsApp referral or an interactive reply id), never
   from message text, and never from a prototype key of the catalogue.
-- The Meta Cloud API transport (ADR 0026): the outbound send (`sendWhatsAppText`)
+- The Meta Cloud API transport (ADR 0028): the outbound send (`sendWhatsAppText`)
   and the credential and role-catalogue loaders are unit-tested with an injected
   fetch, so the wire shape is proven without a network call.
 - The live surface (`agent/channels/intake.ts`): the Phase 0 `/intake`
@@ -50,8 +50,8 @@ model is called. This is why Task 1.3 is partial.
 
 ## Blocker 2 (provisioning): no WhatsApp number or Cloud API credentials
 
-The ADR gate for the transport is cleared: ADR 0026 is Accepted (ADR 0028
-proposes restating it on corrected context, with the same decision). The
+The ADR gate for the transport is cleared: ADR 0028 is Accepted (it
+superseded ADR 0026 with the same decision on corrected context). The
 remaining blockers here are provisioning, not code:
 
 1. No WhatsApp Business (Meta) number is provisioned for this project. This is

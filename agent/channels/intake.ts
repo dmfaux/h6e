@@ -7,7 +7,7 @@ import {
 } from "../../src/channel/whatsapp.ts";
 
 // Task 1.3: the live WhatsApp webhook surface (requirements A1, I1, I2, I3;
-// ADRs 0010, 0026). This is the Phase 0 `/intake` placeholder turned live, on
+// ADRs 0010, 0028). This is the Phase 0 `/intake` placeholder turned live, on
 // the same URL behind the same Vercel WAF and bot protection (docs/phase-0/
 // edge-protection.md, firewall-config.json: the rule keys on `path eq /intake`).
 //

@@ -1,6 +1,6 @@
 // Task 1.3: verified WhatsApp ingress and the role-naming acknowledgement.
 //
-// This is the transport for the candidate WhatsApp channel (ADR 0026: a custom
+// This is the transport for the candidate WhatsApp channel (ADR 0028: a custom
 // eve channel over Meta's WhatsApp Business Cloud API, no Twilio or BSP). It
 // carries the verified-ingress logic (ADR 0010): an inbound webhook is proven
 // authentic before anything is processed, and only verified provider events
@@ -30,7 +30,7 @@ import {
   type InboundEvent,
 } from "../workflow/candidate-workflow.ts";
 
-// --- Webhook authenticity (I2, ADR 0010, ADR 0026) ----------------------
+// --- Webhook authenticity (I2, ADR 0010, ADR 0028) ----------------------
 //
 // Meta signs the raw request body with HMAC-SHA256 over the app secret and sends
 // it as `X-Hub-Signature-256: sha256=<hex>`. We recompute over the exact bytes
@@ -246,7 +246,7 @@ export async function correlateApplication(
   return { state: after, acknowledged };
 }
 
-// --- The live Meta leg (ADR 0026) ---------------------------------------
+// --- The live Meta leg (ADR 0028) ---------------------------------------
 //
 // Sending requires a provisioned WhatsApp number and per-environment Cloud API
 // credentials. Until those exist the leg is blocked: we record it and do not
