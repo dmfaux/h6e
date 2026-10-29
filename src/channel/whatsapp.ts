@@ -9,9 +9,9 @@
 // Everything here is a pure function over its inputs (raw body, headers, parsed
 // payload, plain state), so the security boundary and the acknowledgement are
 // proven deterministically without an eve runtime, the same way Task 1.2 proves
-// its reducer. The thin channel wrapper in agent/channels/intake.ts wires the
-// verification to the live HTTP surface; the hand-off into the durable
-// per-candidate workflow is the run ADR 0029 describes, not yet built.
+// its reducer. The route in src/channel/intake-route.ts wires the verification
+// to the live HTTP surface and hands each verified application to the durable
+// candidate run of ADR 0029 (src/workflow/candidate-run.ts).
 //
 // Boundary (Task 1.3): verified ingress and a role-naming acknowledgement only.
 // No FAQ or free-text understanding (Task 1.4), no documents (Task 1.5), no
@@ -20,15 +20,8 @@
 // interpreted from message text.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import {
-  applyEvent,
-  numberFromWorkflowKey,
-  runEffects,
-  workflowKey,
-  type CandidateLogistics,
-  type Effect,
-  type InboundEvent,
-} from "../workflow/candidate-workflow.ts";
+import { normalizeE164 } from "../workflow/candidate-key.ts";
+import type { InboundEvent } from "../workflow/candidate-workflow.ts";
 
 // --- Webhook authenticity (I2, ADR 0010, ADR 0028) ----------------------
 //
@@ -144,15 +137,14 @@ function asArray(v: unknown): unknown[] {
   return Array.isArray(v) ? v : [];
 }
 
-// WhatsApp sends the number without a leading + (e.g. "27821234567"). The
-// workflow key derivation expects E.164 with the +; normalisation happens there.
+// WhatsApp sends the number without a leading + (e.g. "27821234567").
 function ensurePlus(raw: string): string {
   return raw.startsWith("+") ? raw : `+${raw}`;
 }
 
 function e164OrNull(candidate: string): string | null {
   try {
-    return numberFromWorkflowKey(workflowKey(candidate));
+    return normalizeE164(candidate);
   } catch {
     return null;
   }
@@ -205,45 +197,20 @@ export function acknowledgement(role: string): string {
   );
 }
 
-// --- Correlating a verified application to its durable workflow (A1, I3) -
+// --- From a verified application to the run's event (A1, I3) --------------
 //
-// The session-side logic: take a verified application and decide its once-only
-// side effect. A new application starts the workflow (Task 1.2's
-// `workflow-started` effect); that start is the trigger for the role-naming
-// acknowledgement. A replayed delivery (same message id) produces no effect, so
-// no second acknowledgement. Pure, so it is tested without an eve runtime. The
-// durable path that runs it (the workflow's `ingest`) is not wired from the
-// channel yet: see ADR 0029 and agent/channels/intake.ts.
+// The reducer dedups on the keyed hash of the message id, never the raw id
+// (ADR 0029), and the candidate's number travels inside the event because the
+// run checks it against its own. The run's `ingest` then decides the once-only
+// role-naming acknowledgement.
 
-export const ACK_EFFECT_KIND = "candidate-acknowledged";
-
-export interface AckEffect extends Effect {
-  readonly role: string;
-}
-
-export async function correlateApplication(
-  state: CandidateLogistics,
-  app: InboundApplication,
+export function applicationEvent(
+  app: Pick<InboundApplication, "number">,
   role: string,
-  perform: (effect: AckEffect) => void | Promise<void>,
-): Promise<{ state: CandidateLogistics; acknowledged: boolean }> {
-  const event: InboundEvent = {
-    kind: "application-received",
-    id: app.messageId,
-    number: app.number,
-  };
-  const { state: advanced, effects } = applyEvent(state, event);
-  // The acknowledgement rides on the once-only workflow-start. Filtering on the
-  // effect kind means a replay (which yields no effects) sends nothing.
-  const ackEffects: AckEffect[] = effects
-    .filter((e) => e.kind === "workflow-started")
-    .map((e) => ({ id: `ack:${e.id}`, kind: ACK_EFFECT_KIND, role }));
-  let acknowledged = false;
-  const after = await runEffects(advanced, ackEffects, async (e) => {
-    await perform(e as AckEffect);
-    acknowledged = true;
-  });
-  return { state: after, acknowledged };
+  messageIdHash: string,
+  at: number,
+): InboundEvent {
+  return { kind: "application-received", id: messageIdHash, number: app.number, role, at };
 }
 
 // --- The live Meta leg (ADR 0028) ---------------------------------------
@@ -314,6 +281,3 @@ export async function sendWhatsAppText(
     throw new Error(`WhatsApp Cloud API send failed: ${res.status} ${detail}`);
   }
 }
-
-// Re-export so the channel wrapper has one import surface.
-export { workflowKey };

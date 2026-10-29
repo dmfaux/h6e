@@ -4,7 +4,7 @@ This records what blocks Task 1.3 (live WhatsApp ingress and application
 acknowledgement), in the same fail-closed pattern as the Phase 0 Connect blocker
 (`docs/phase-0/task-0.6-blocker.md`): the machinery is built and proven
 deterministically, and what cannot be exercised is recorded rather than faked.
-There are two blockers. One is code still to build (the run ADR 0029 decides). One is provisioning.
+One blocker remains, and it is provisioning. The code blocker (no model-free path into the durable workflow) is resolved by the candidate run of ADR 0029.
 
 ## What is built and proven
 
@@ -14,41 +14,27 @@ There are two blockers. One is code still to build (the run ADR 0029 decides). O
   are refused. A null entry or a sender that is not an E.164 number is dropped
   at parse time rather than failing the batch. See `src/channel/whatsapp.ts`
   and `src/channel/whatsapp.test.ts`.
-- Correlation and idempotency (I3, ADR 0010, Task 1.2): the pure
-  `correlateApplication` and the workflow's `ingestWith` deduplicate on the
-  provider message id, start the workflow once, and commit the event only after
-  its effects complete, so a failed acknowledgement is retried on redelivery.
+- Correlation and idempotency (I3, ADR 0010, Task 1.2): the reducer and
+  `ingest` in `src/workflow/candidate-workflow.ts` deduplicate on a keyed hash
+  of the provider message id, acknowledge once per run, and commit the event
+  only after its effects complete, so a failed acknowledgement is retried on
+  redelivery.
 - Role-naming acknowledgement (A1): resolved from a structured requisition
   reference (a click-to-WhatsApp referral or an interactive reply id), never
   from message text, and never from a prototype key of the catalogue.
 - The Meta Cloud API transport (ADR 0028): the outbound send (`sendWhatsAppText`)
   and the credential and role-catalogue loaders are unit-tested with an injected
   fetch, so the wire shape is proven without a network call.
-- The live surface (`agent/channels/intake.ts`): the Phase 0 `/intake`
-  placeholder is the live WhatsApp webhook, on the same URL behind the same edge
-  protection (below). Booting the build and posting a signed payload returns 200
-  and a forged signature returns 403, with no model span and no candidate number
-  in the log.
+- The live surface (`agent/channels/intake.ts`, `src/channel/intake-route.ts`):
+  the Phase 0 `/intake` placeholder is the live WhatsApp webhook, on the same
+  URL behind the same edge protection (below), and hands each verified
+  application to its candidate run.
 
-## Blocker 1 (code): no model-free path into the durable workflow
+## Resolved: the hand-off into the durable workflow
 
-The verified application is not handed into the durable candidate workflow. On
-eve 0.85 the only way to put a message into a durable session is a channel send,
-and a send starts a model turn. The first implementation did that, and a review
-proved by booting the build that each application produced an
-`invoke_agent` turn and a `chat anthropic/claude-sonnet-4.6` call carrying the
-candidate's number, while nothing ran `ingest`. A hook that cancels the turn
-before the model was tried and discarded: eve throws away the `defineState`
-writes made in a cancelled turn, so the next delivery for the same number
-started the workflow again and sent a second acknowledgement. The evidence and
-the decision are in ADR 0029 (Accepted 2026-10-29).
+On eve 0.85 the only way into a durable session is a model turn, and a hook-cancelled turn discards `defineState` (evidence in ADR 0029). ADR 0029 therefore moved the candidate workflow to a Workflow SDK run started from the route. That run is built (`src/workflow/candidate-run.ts`), and `/intake` now resumes or starts it for each verified application. The route answers Meta 200 only once every application is durably accepted, and 5xx otherwise. The local boot proof and the preview handoff proof are recorded in `docs/phase-1/task-1.3-handoff-proof.md`. No session is created and no model is called.
 
-Until the run ADR 0029 describes is built, the route fails closed: it verifies and parses,
-answers Meta 200 so a verified event is not redelivered as a storm, logs a count,
-and processes nothing. No session is created, no acknowledgement is sent, no
-model is called. This is why Task 1.3 is partial.
-
-## Blocker 2 (provisioning): no WhatsApp number or Cloud API credentials
+## Blocker (provisioning): no WhatsApp number or Cloud API credentials
 
 The ADR gate for the transport is cleared: ADR 0028 is Accepted (it
 superseded ADR 0026 with the same decision on corrected context). The
@@ -91,12 +77,4 @@ the number and credentials above.
 
 ## To unblock
 
-1. Build the durable per-candidate run ADR 0029 (Accepted) describes, with the
-   deployment handoff, retention 0 and opaque key, wire `/intake` to start or
-   resume it, and prove by booting the build that a signed application reaches
-   `ingest`, a redelivery sends no second acknowledgement, and no `chat` span
-   appears.
-2. Provision a WhatsApp Business number and a Meta app, set the five
-   `WHATSAPP_*` secrets per environment, add the Meta IP bypass on `/intake`,
-   then drive one real inbound application and confirm the role-naming
-   acknowledgement is delivered. Record that exchange to close the live leg.
+Provision a WhatsApp Business number and a Meta app, and set the `WHATSAPP_*` secrets and `CANDIDATE_KEY_SECRET` per environment. Add the Meta IP bypass on `/intake`, then drive one real inbound application and confirm that the role-naming acknowledgement is delivered. Record that exchange to close the live leg.
