@@ -62,7 +62,10 @@ export async function readCandidateRun(runId: string): Promise<Record<string, un
   await read("status", run.status);
   await read("createdAt", run.createdAt);
   await read("completedAt", run.completedAt);
-  await read("returnValue", run.returnValue);
+  // `returnValue` awaits completion, so only read it for a run that has ended.
+  if (out.status !== "pending" && out.status !== "running") {
+    await read("returnValue", run.returnValue);
+  }
   return out;
 }
 
